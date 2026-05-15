@@ -1,0 +1,42 @@
+# Adapter Configuration Example (YAML)
+# 
+# This file demonstrates how to configure adapters for the Isolated Agents SDK.
+# You can load this configuration using:
+#
+#   from isolated_agents_sdk.adapters import load_config
+#   config = load_config(config_file="config.yaml")
+
+# Container Runtime Adapter
+# Specifies which container runtime to use (podman, docker, etc.)
+container_adapter: podman
+container_config:
+  # Podman-specific configuration
+  socket_path: null  # Use default socket
+  timeout: 300  # Timeout in seconds for container operations
+
+# Storage Backend Adapter
+# Specifies where to store artifacts and outputs
+storage_adapter: local
+storage_config:
+  # Local filesystem storage configuration
+  base_path: ./storage  # Base directory for storing artifacts
+  create_dirs: true  # Automatically create directories if they don't exist
+
+# Audit Logger Adapter
+# Specifies how to log audit events
+audit_adapter: file
+audit_config:
+  # File-based audit logging configuration
+  log_file: ./logs/audit.jsonl  # Path to audit log file
+  create_dirs: true  # Automatically create log directory
+
+# Policy Validator Adapter
+# Specifies how to validate policies
+policy_adapter: default
+policy_config:
+  # Default policy validator configuration
+  strict_mode: false  # Whether to reject policies with warnings
+  max_cpu_cores: 4.0  # Maximum CPU cores allowed
+  max_memory_mb: 4096  # Maximum memory in MB allowed
+
+# Made with Bob

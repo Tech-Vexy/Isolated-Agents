@@ -1,0 +1,23 @@
+{
+  "container_adapter": "podman",
+  "container_config": {
+    "socket_path": null,
+    "timeout": 300
+  },
+  "storage_adapter": "local",
+  "storage_config": {
+    "base_path": "./storage",
+    "create_dirs": true
+  },
+  "audit_adapter": "file",
+  "audit_config": {
+    "log_file": "./logs/audit.jsonl",
+    "create_dirs": true
+  },
+  "policy_adapter": "default",
+  "policy_config": {
+    "strict_mode": false,
+    "max_cpu_cores": 4.0,
+    "max_memory_mb": 4096
+  }
+}

@@ -1,0 +1,356 @@
+# Isolated Agents SDK - Examples
+
+Complete, production-ready examples for all supported frameworks and common scenarios.
+
+## 📁 Directory Structure
+
+```
+examples/
+├── README.md                    # This file
+├── frameworks/                  # Framework-specific examples
+│   ├── langchain/              # LangChain examples
+│   ├── crewai/                 # CrewAI examples
+│   ├── autogpt/                # AutoGPT examples
+│   ├── llamaindex/             # LlamaIndex examples
+│   ├── haystack/               # Haystack examples
+│   ├── semantic_kernel/        # Semantic Kernel examples
+│   ├── nodejs/                 # Node.js examples
+│   ├── go/                     # Go examples
+│   ├── rust/                   # Rust examples
+│   └── java/                   # Java examples
+├── scenarios/                   # Common use case examples
+│   ├── web_scraping/           # Web scraping examples
+│   ├── data_analysis/          # Data analysis examples
+│   ├── code_generation/        # Code generation examples
+│   ├── document_processing/    # Document processing examples
+│   ├── api_integration/        # API integration examples
+│   └── multi_agent/            # Multi-agent examples
+├── features/                    # Feature-specific examples
+│   ├── decorators/             # Decorator system examples
+│   ├── composability/          # Agent composition examples
+│   ├── multimodal/             # Multimodal output examples
+│   ├── validation/             # Validation examples
+│   └── telemetry/              # Telemetry examples
+└── advanced/                    # Advanced patterns
+    ├── custom_adapters/        # Custom adapter examples
+    ├── distributed/            # Distributed agent examples
+    ├── production/             # Production deployment examples
+    └── testing/                # Testing examples
+```
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+```bash
+# Install the SDK
+pip install isolated-agents-sdk
+
+# Or with uv
+uv pip install isolated-agents-sdk
+```
+
+### Running Examples
+
+Each example is self-contained and can be run directly:
+
+```bash
+# Python framework example
+python examples/frameworks/langchain/basic_agent.py
+
+# Polyglot example
+python examples/frameworks/nodejs/run_nodejs_agent.py
+
+# Scenario example
+python examples/scenarios/web_scraping/scrape_and_analyze.py
+```
+
+## 📚 Examples by Category
+
+### 🐍 Python Frameworks
+
+#### LangChain
+- **basic_agent.py** - Simple LangChain agent with OpenAI
+- **rag_agent.py** - RAG with FAISS vector store
+- **multi_agent.py** - Multi-agent system
+- **streaming_agent.py** - Streaming responses
+- **tools_agent.py** - Agent with custom tools
+
+#### CrewAI
+- **basic_crew.py** - Basic CrewAI crew
+- **research_crew.py** - Research and writing crew
+- **hierarchical_crew.py** - Hierarchical crew structure
+
+#### AutoGPT
+- **basic_agent.py** - Autonomous task completion
+- **custom_commands.py** - Custom command plugins
+
+#### LlamaIndex
+- **basic_agent.py** - Document querying
+- **chat_engine.py** - Chat engine with memory
+- **query_pipeline.py** - Query pipeline
+
+#### Haystack
+- **basic_pipeline.py** - Basic Haystack pipeline
+- **rag_pipeline.py** - RAG pipeline
+
+#### Semantic Kernel
+- **basic_kernel.py** - Basic Semantic Kernel
+- **plugins.py** - Custom plugins
+
+### 🌐 Polyglot Examples
+
+#### Node.js
+- **basic_agent.js** - OpenAI integration
+- **langchain_js.js** - LangChain.js
+- **express_api.js** - Express API agent
+
+#### Go
+- **basic_agent.go** - OpenAI integration
+- **concurrent_agent.go** - Concurrent processing
+
+#### Rust
+- **basic_agent.rs** - OpenAI integration
+- **async_agent.rs** - Async processing
+
+#### Java
+- **BasicAgent.java** - OpenAI integration
+- **SpringAgent.java** - Spring Boot integration
+
+### 🎯 Scenario Examples
+
+#### Web Scraping
+- **scrape_and_analyze.py** - Scrape and analyze content
+- **multi_site_scraper.py** - Scrape multiple sites
+- **dynamic_scraper.py** - Scrape dynamic content
+
+#### Data Analysis
+- **analyze_csv.py** - CSV analysis with pandas
+- **time_series.py** - Time series analysis
+- **ml_pipeline.py** - ML pipeline
+
+#### Code Generation
+- **generate_code.py** - Generate and validate code
+- **refactor_code.py** - Code refactoring
+- **test_generation.py** - Test generation
+
+#### Document Processing
+- **pdf_processor.py** - PDF processing
+- **docx_processor.py** - DOCX processing
+- **ocr_processor.py** - OCR processing
+
+#### API Integration
+- **rest_api.py** - REST API integration
+- **graphql_api.py** - GraphQL integration
+- **webhook_handler.py** - Webhook handling
+
+#### Multi-Agent
+- **pipeline.py** - Sequential pipeline
+- **parallel.py** - Parallel execution
+- **hierarchical.py** - Hierarchical structure
+
+### 🎨 Feature Examples
+
+#### Decorators
+- **all_decorators.py** - All decorator types
+- **policy_decorator.py** - Policy decorator
+- **network_decorator.py** - Network decorator
+
+#### Composability
+- **sequential.py** - Sequential composition
+- **parallel.py** - Parallel composition
+- **conditional.py** - Conditional composition
+
+#### Multimodal
+- **image_generation.py** - Image generation
+- **audio_processing.py** - Audio processing
+- **video_processing.py** - Video processing
+
+#### Validation
+- **output_validation.py** - Output validation
+- **schema_validation.py** - Schema validation
+- **expect_sequences.py** - Expect sequences
+
+#### Telemetry
+- **basic_telemetry.py** - Basic telemetry
+- **custom_metrics.py** - Custom metrics
+- **real_time_monitoring.py** - Real-time monitoring
+
+### 🔧 Advanced Examples
+
+#### Custom Adapters
+- **custom_container_adapter.py** - Custom container adapter
+- **custom_storage_adapter.py** - Custom storage adapter
+- **custom_logger_adapter.py** - Custom logger adapter
+
+#### Distributed
+- **distributed_agents.py** - Distributed agents
+- **load_balancing.py** - Load balancing
+- **fault_tolerance.py** - Fault tolerance
+
+#### Production
+- **production_config.py** - Production configuration
+- **monitoring.py** - Production monitoring
+- **deployment.py** - Deployment patterns
+
+#### Testing
+- **unit_tests.py** - Unit testing
+- **integration_tests.py** - Integration testing
+- **property_tests.py** - Property-based testing
+
+## 🔑 Environment Variables
+
+Most examples require API keys. Set them before running:
+
+```bash
+# OpenAI
+export OPENAI_API_KEY=sk-...
+
+# Anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Groq
+export GROQ_API_KEY=gsk_...
+
+# Google
+export GOOGLE_API_KEY=...
+
+# AWS (for S3 storage adapter)
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+
+# Azure (for Azure storage adapter)
+export AZURE_STORAGE_CONNECTION_STRING=...
+```
+
+## 📖 Documentation
+
+For detailed documentation, see:
+- [Production Ready Summary](../docs/PRODUCTION_READY_SUMMARY.md)
+- [Adapter Architecture](../docs/ADAPTER_ARCHITECTURE.md)
+- [Decorators Guide](../docs/DECORATORS.md)
+- [Composability Guide](../docs/COMPOSABILITY.md)
+- [Multimodal Outputs](../docs/MULTIMODAL_OUTPUTS.md)
+- [Examples Catalog](../docs/EXAMPLES_CATALOG.md)
+
+## 🤝 Contributing
+
+To add a new example:
+
+1. Choose the appropriate category
+2. Create a self-contained example file
+3. Include docstring with description and usage
+4. Add error handling and validation
+5. Test the example thoroughly
+6. Update this README
+
+## 📝 Example Template
+
+```python
+"""Brief description of what this example demonstrates.
+
+Usage:
+    export API_KEY=...
+    python examples/category/example.py
+"""
+
+import os
+import sys
+from pathlib import Path
+
+
+def agent_function():
+    """Agent function that runs in the container."""
+    # Import dependencies inside the function
+    from some_library import SomeClass
+    from pathlib import Path
+    
+    # Your agent logic here
+    result = SomeClass().do_something()
+    
+    # Write outputs to /output
+    output_dir = Path("/output")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / "result.txt").write_text(str(result))
+    
+    print(f"✓ Completed successfully")
+
+
+if __name__ == "__main__":
+    from isolated_agents_sdk import run_agent, Policy, NetworkPolicy
+    
+    # Check prerequisites
+    if not os.environ.get("API_KEY"):
+        print("Error: API_KEY not set", file=sys.stderr)
+        sys.exit(1)
+    
+    # Create output directory
+    host_output = Path("./output")
+    host_output.mkdir(exist_ok=True)
+    
+    print("Launching agent...")
+    
+    # Run agent
+    result = run_agent(
+        agent=agent_function,
+        working_dir="./workspace",
+        host_output_path=host_output,
+        policy=Policy(
+            network=NetworkPolicy(disabled=False),
+            allowed_env_vars=["API_KEY"],
+            pip_packages=["some-library"],
+        )
+    )
+    
+    print(f"\n✓ Agent completed with exit code {result.exit_code}")
+    
+    if result.artifacts:
+        for name, path in result.artifacts.items():
+            print(f"  • {name}")
+    
+    sys.exit(result.exit_code)
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**Import errors in examples:**
+- Import errors for framework packages (langchain, crewai, etc.) are expected in the host environment
+- These packages are installed in the container via `pip_packages` policy parameter
+
+**Container runtime not found:**
+- Install Podman or Docker
+- See [Automatic Installation Guide](../docs/AUTOMATIC_INSTALLATION.md)
+
+**Network access denied:**
+- Ensure `NetworkPolicy(disabled=False)` is set
+- Add required endpoints to `allowed_endpoints`
+
+**API key not found:**
+- Set environment variables before running
+- Add API key to `allowed_env_vars` in policy
+
+**Output files not created:**
+- Ensure agent writes to `/output` directory
+- Check `host_output_path` parameter
+
+## 📊 Example Statistics
+
+- **Total Examples:** 81+
+- **Python Frameworks:** 16 examples
+- **Polyglot:** 9 examples
+- **Scenarios:** 20 examples
+- **Features:** 23 examples
+- **Advanced:** 13 examples
+
+## 🔗 Related Resources
+
+- [GitHub Repository](https://github.com/isolated-agents/sdk)
+- [Documentation](https://docs.isolated-agents.dev)
+- [API Reference](https://docs.isolated-agents.dev/api)
+- [Community Forum](https://community.isolated-agents.dev)
+
+## 📄 License
+
+All examples are provided under the same license as the Isolated Agents SDK.

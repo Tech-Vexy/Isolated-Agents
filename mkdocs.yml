@@ -1,0 +1,223 @@
+# Isolated Agents SDK Documentation
+
+site_name: Isolated Agents SDK
+site_description: Production-ready SDK for running AI agents in isolated containers
+site_author: Isolated Agents Team
+site_url: https://docs.isolated-agents.dev
+
+repo_name: isolated-agents/sdk
+repo_url: https://github.com/isolated-agents/sdk
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  font:
+    text: Roboto
+    code: Roboto Mono
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+    logo: material/shield-lock
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/isolated-agents/sdk
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/isolated-agents
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/isolated_agents
+  analytics:
+    provider: google
+    property: G-XXXXXXXXXX
+  version:
+    provider: mike
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/extra.js
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+plugins:
+  - search:
+      lang: en
+      separator: '[\s\-,:!=\[\]()"/]+|(?!\b)(?=[A-Z][a-z])|\.(?!\d)|&[lg]t;'
+  - minify:
+      minify_html: true
+  - git-revision-date-localized:
+      enable_creation_date: true
+      type: timeago
+  - tags:
+      tags_file: tags.md
+
+nav:
+  - Home:
+    - index.md
+    - Getting Started: getting-started.md
+    - Quick Start: quick-start.md
+    - Installation: installation.md
+  
+  - Core Concepts:
+    - Overview: concepts/overview.md
+    - Architecture: concepts/architecture.md
+    - Policies: concepts/policies.md
+    - Isolation: concepts/isolation.md
+    - Security: concepts/security.md
+  
+  - Architecture:
+    - Production Ready: PRODUCTION_READY_SUMMARY.md
+    - Adapter Pattern: ADAPTER_ARCHITECTURE.md
+    - Adapter Summary: ADAPTER_PATTERN_SUMMARY.md
+    - Architecture Diagrams: ARCHITECTURE_DIAGRAM.md
+    - Implementation Plan: IMPLEMENTATION_PLAN.md
+    - Complete Guide: COMPLETE_IMPLEMENTATION_GUIDE.md
+  
+  - Features:
+    - Decorators: DECORATORS.md
+    - Composability: COMPOSABILITY.md
+    - Multimodal Outputs: MULTIMODAL_OUTPUTS.md
+    - Validation: EXPECT_SEQUENCES.md
+    - Telemetry: TELEMETRY_LOGGING.md
+    - Framework Compatibility: FRAMEWORK_COMPATIBILITY.md
+    - Long-Running Agents: LONG_RUNNING_AGENTS.md
+    - Agent Communication: AGENT_COMMUNICATION.md
+  
+  - Implementation:
+    - Quickstart: QUICKSTART_ADAPTERS.md
+    - API Adapter Support: API_ADAPTER_SUPPORT.md
+    - Migration Guide: MIGRATION_GUIDE.md
+    - Extension Guide: EXTENDING_ADAPTERS.md
+    - Refactoring Guide: REFACTORING_GUIDE.md
+    - Gap Analysis: IMPLEMENTATION_GAP_ANALYSIS.md
+    - Cross-Platform: CROSSPLATFORM_COMPATIBILITY.md
+    - Auto Installation: AUTOMATIC_INSTALLATION.md
+  
+  - Examples:
+    - Overview: EXAMPLES_CATALOG.md
+    - All Examples: ../examples/ALL_EXAMPLES.md
+    - Examples README: ../examples/README.md
+    - Adapters:
+      - Adapter Examples: ../examples/adapters/README.md
+      - Basic Usage: ../examples/adapters/basic_usage.py
+      - API Usage: ../examples/adapters/api_usage.py
+      - Configuration: ../examples/adapters/config.yaml
+    - Python Frameworks:
+      - LangChain: examples/langchain.md
+      - CrewAI: examples/crewai.md
+      - AutoGPT: examples/autogpt.md
+      - LlamaIndex: examples/llamaindex.md
+    - Polyglot:
+      - Node.js: examples/nodejs.md
+      - Go: examples/go.md
+      - Rust: examples/rust.md
+      - Java: examples/java.md
+    - Scenarios:
+      - Web Scraping: examples/web-scraping.md
+      - Data Analysis: examples/data-analysis.md
+      - Code Generation: examples/code-generation.md
+      - Multi-Agent: examples/multi-agent.md
+  
+  - API Reference:
+    - Overview: api/overview.md
+    - run_agent: api/run-agent.md
+    - Policy: api/policy.md
+    - NetworkPolicy: api/network-policy.md
+    - AgentResult: api/agent-result.md
+    - Adapters: api/adapters.md
+    - Decorators: api/decorators.md
+  
+  - Guides:
+    - Best Practices: guides/best-practices.md
+    - Security: guides/security.md
+    - Performance: guides/performance.md
+    - Testing: guides/testing.md
+    - Deployment: guides/deployment.md
+    - Troubleshooting: guides/troubleshooting.md
+  
+  - Community:
+    - Contributing: community/contributing.md
+    - Code of Conduct: community/code-of-conduct.md
+    - Changelog: community/changelog.md
+    - Roadmap: community/roadmap.md
+    - FAQ: community/faq.md
+  
+  - About:
+    - License: about/license.md
+    - Team: about/team.md
+    - Contact: about/contact.md
+
+# Made with Bob
