@@ -23,23 +23,35 @@ from isolated_agents_sdk.output_collector import OutputCollector
 # Helpers
 # ---------------------------------------------------------------------------
 
-async def _make_mock_proc(exit_code: int = 0, stdout: bytes = b"", stderr: bytes = b""):
-    """Return a mock asyncio subprocess that finishes immediately."""
-    proc = MagicMock()
-    proc.communicate = AsyncMock(return_value=(stdout, stderr))
-    proc.wait = AsyncMock(return_value=exit_code)
-    proc.returncode = exit_code
-    return proc
+from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
+from isolated_agents_sdk.adapters.container.types import ExecResult
+from isolated_agents_sdk.adapters.storage.base import StorageAdapter
+from isolated_agents_sdk.adapters.storage.types import StorageLocation
 
+async def _make_mock_container_adapter():
+    adapter = MagicMock(spec=ContainerRuntimeAdapter)
+    adapter.exec_in_container = AsyncMock(return_value=ExecResult(exit_code=0, stdout="", stderr=""))
+    adapter.copy_from_container = AsyncMock()
+    adapter.get_adapter_name = MagicMock(return_value="MockContainerAdapter")
+    return adapter
+
+async def _make_mock_storage_adapter():
+    adapter = MagicMock(spec=StorageAdapter)
+    adapter.initialize = AsyncMock()
+    adapter.store_artifact = AsyncMock(return_value=StorageLocation(session_id="s", artifact_name="a", path="/fake/path"))
+    return adapter
 
 CONTAINER_ID = "abc123"
 OUTPUT_PATH = "/output"
 SESSION_ID = "sess-001"
 AGENT_ID = "agent-001"
 
-
-def _make_collector(audit_logger: AuditLogger | None = None) -> OutputCollector:
-    return OutputCollector(audit_logger=audit_logger or MagicMock(spec=AuditLogger))
+def _make_collector(container_adapter=None, storage_adapter=None, audit_logger=None) -> OutputCollector:
+    return OutputCollector(
+        container_adapter=container_adapter,
+        storage_adapter=storage_adapter,
+        audit_logger=audit_logger or MagicMock(spec=AuditLogger)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -54,104 +66,84 @@ class TestMissingOutputPath:
 
     async def test_returns_agent_result_on_missing_path(self, tmp_path: Path) -> None:
         """collect() returns an AgentResult (not raises) when output path is absent."""
-        collector = _make_collector()
+        adapter = await _make_mock_container_adapter()
+        adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
+        collector = _make_collector(container_adapter=adapter)
 
-        # podman exec test -d … exits non-zero → path does not exist
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=1)
-            result = await collector.collect(
-                container_id=CONTAINER_ID,
-                output_path_in_container=OUTPUT_PATH,
-                host_output_path=tmp_path / "out",
-                max_output_bytes=None,
-                exit_code=0,
-                session_id=SESSION_ID,
-                agent_id=AGENT_ID,
-            )
+        result = await collector.collect(
+            container_id=CONTAINER_ID,
+            output_path_in_container=OUTPUT_PATH,
+            host_output_path=tmp_path / "out",
+            max_output_bytes=None,
+            exit_code=0,
+            session_id=SESSION_ID,
+            agent_id=AGENT_ID,
+        )
 
         assert isinstance(result, AgentResult)
 
     async def test_artifacts_are_empty_on_missing_path(self, tmp_path: Path) -> None:
         """artifacts dict is empty when the container output path is absent."""
-        collector = _make_collector()
+        adapter = await _make_mock_container_adapter()
+        adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
+        collector = _make_collector(container_adapter=adapter)
 
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=1)
-            result = await collector.collect(
-                container_id=CONTAINER_ID,
-                output_path_in_container=OUTPUT_PATH,
-                host_output_path=tmp_path / "out",
-                max_output_bytes=None,
-                exit_code=0,
-                session_id=SESSION_ID,
-                agent_id=AGENT_ID,
-            )
+        result = await collector.collect(
+            container_id=CONTAINER_ID,
+            output_path_in_container=OUTPUT_PATH,
+            host_output_path=tmp_path / "out",
+            max_output_bytes=None,
+            exit_code=0,
+            session_id=SESSION_ID,
+            agent_id=AGENT_ID,
+        )
 
         assert result.artifacts == {}
 
     async def test_exit_code_preserved_on_missing_path(self, tmp_path: Path) -> None:
         """The caller-supplied exit code is preserved even when output path is absent."""
-        collector = _make_collector()
+        adapter = await _make_mock_container_adapter()
+        adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
+        collector = _make_collector(container_adapter=adapter)
 
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=1)
-            result = await collector.collect(
-                container_id=CONTAINER_ID,
-                output_path_in_container=OUTPUT_PATH,
-                host_output_path=tmp_path / "out",
-                max_output_bytes=None,
-                exit_code=42,
-                session_id=SESSION_ID,
-                agent_id=AGENT_ID,
-            )
+        result = await collector.collect(
+            container_id=CONTAINER_ID,
+            output_path_in_container=OUTPUT_PATH,
+            host_output_path=tmp_path / "out",
+            max_output_bytes=None,
+            exit_code=42,
+            session_id=SESSION_ID,
+            agent_id=AGENT_ID,
+        )
 
         assert result.exit_code == 42
 
     async def test_session_id_preserved_on_missing_path(self, tmp_path: Path) -> None:
         """session_id is preserved in the returned AgentResult."""
-        collector = _make_collector()
+        adapter = await _make_mock_container_adapter()
+        adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
+        collector = _make_collector(container_adapter=adapter)
 
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=1)
-            result = await collector.collect(
-                container_id=CONTAINER_ID,
-                output_path_in_container=OUTPUT_PATH,
-                host_output_path=tmp_path / "out",
-                max_output_bytes=None,
-                exit_code=0,
-                session_id=SESSION_ID,
-                agent_id=AGENT_ID,
-            )
+        result = await collector.collect(
+            container_id=CONTAINER_ID,
+            output_path_in_container=OUTPUT_PATH,
+            host_output_path=tmp_path / "out",
+            max_output_bytes=None,
+            exit_code=0,
+            session_id=SESSION_ID,
+            agent_id=AGENT_ID,
+        )
 
         assert result.session_id == SESSION_ID
 
     async def test_warning_is_logged_on_missing_path(self, tmp_path: Path, caplog) -> None:
         """A warning is emitted to the Python logger when the output path is absent."""
         import logging
+        adapter = await _make_mock_container_adapter()
+        adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
+        collector = _make_collector(container_adapter=adapter)
 
-        collector = _make_collector()
-
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=1)
-            with caplog.at_level(logging.WARNING, logger="isolated_agents_sdk.output_collector"):
-                await collector.collect(
-                    container_id=CONTAINER_ID,
-                    output_path_in_container=OUTPUT_PATH,
-                    host_output_path=tmp_path / "out",
-                    max_output_bytes=None,
-                    exit_code=0,
-                    session_id=SESSION_ID,
-                    agent_id=AGENT_ID,
-                )
-
-        assert any("does not exist" in record.message for record in caplog.records)
-
-    async def test_no_podman_cp_called_on_missing_path(self, tmp_path: Path) -> None:
-        """podman cp is never invoked when the output path check fails."""
-        collector = _make_collector()
-
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=1)
+        with caplog.at_level(logging.WARNING, logger="isolated_agents_sdk.output_collector"):
             await collector.collect(
                 container_id=CONTAINER_ID,
                 output_path_in_container=OUTPUT_PATH,
@@ -162,10 +154,25 @@ class TestMissingOutputPath:
                 agent_id=AGENT_ID,
             )
 
-        # Only the existence-check call should have been made
-        for c in mock_exec.call_args_list:
-            args = c.args
-            assert "cp" not in args, "podman cp should not be called when output path is missing"
+        assert any("does not exist" in record.message for record in caplog.records)
+
+    async def test_no_copy_called_on_missing_path(self, tmp_path: Path) -> None:
+        """copy_from_container is never invoked when the output path check fails."""
+        adapter = await _make_mock_container_adapter()
+        adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
+        collector = _make_collector(container_adapter=adapter)
+
+        await collector.collect(
+            container_id=CONTAINER_ID,
+            output_path_in_container=OUTPUT_PATH,
+            host_output_path=tmp_path / "out",
+            max_output_bytes=None,
+            exit_code=0,
+            session_id=SESSION_ID,
+            agent_id=AGENT_ID,
+        )
+
+        adapter.copy_from_container.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -185,68 +192,44 @@ class TestOutputSizeLimit:
         max_output_bytes: int,
         audit_logger: AuditLogger,
     ) -> None:
-        """Helper: simulate a container that has *files* at OUTPUT_PATH.
-
-        The new OutputCollector calls:
-          1. ``podman exec … test -d <path>``  — existence check
-          2. ``podman exec … find <path> -type f``  — list regular files
-          3. ``podman cp <container>:<file> <host_path>``  — one call per file
-        """
-        # Build a fake staging area that mimics the container's output directory.
         fake_output_dir = tmp_path / "fake_container_output"
         fake_output_dir.mkdir(parents=True, exist_ok=True)
         for name, content in files.items():
             (fake_output_dir / name).write_bytes(content)
 
-        # Pre-build the find output: one absolute path per file.
-        find_output = "\n".join(
-            f"{OUTPUT_PATH}/{name}" for name in files
-        ).encode()
+        find_output = "\n".join(f"{OUTPUT_PATH}/{name}" for name in files)
 
-        async def fake_exec(*cmd, **kwargs):
-            cmd = list(cmd)
-            if "podman" not in cmd:
-                return await _make_mock_proc(exit_code=0)
+        container_adapter = await _make_mock_container_adapter()
+        
+        async def fake_exec(cid, cmd, **kwargs):
+            if "test" in cmd:
+                return ExecResult(exit_code=0, stdout="", stderr="")
+            if "find" in cmd:
+                return ExecResult(exit_code=0, stdout=find_output, stderr="")
+            return ExecResult(exit_code=0, stdout="", stderr="")
 
-            subcmd = cmd[1] if len(cmd) > 1 else ""
+        container_adapter.exec_in_container.side_effect = fake_exec
 
-            if subcmd == "exec":
-                if "test" in cmd:
-                    # Existence check — path exists.
-                    return await _make_mock_proc(exit_code=0)
-                if "find" in cmd:
-                    # File listing — return one path per file.
-                    return await _make_mock_proc(exit_code=0, stdout=find_output)
-                return await _make_mock_proc(exit_code=0)
+        async def fake_cp(cid, src, dest):
+            filename = Path(src).name
+            src_file = fake_output_dir / filename
+            if src_file.exists():
+                import shutil as _shutil
+                _shutil.copy2(str(src_file), dest)
 
-            if subcmd == "cp":
-                # Per-file copy: ``podman cp container:/output/name /host/path``
-                # The source is ``container_id:/output/name``; extract the filename.
-                src = cmd[2]  # e.g. "abc123:/output/big.bin"
-                dest_str = cmd[3]
-                if ":" in src and src.index(":") != 1:
-                    container_file = src.split(":", 1)[1]  # "/output/big.bin"
-                    filename = Path(container_file).name
-                    src_file = fake_output_dir / filename
-                    if src_file.exists():
-                        import shutil as _shutil
-                        _shutil.copy2(str(src_file), dest_str)
-                return await _make_mock_proc(exit_code=0)
+        container_adapter.copy_from_container.side_effect = fake_cp
 
-            return await _make_mock_proc(exit_code=0)
+        collector = _make_collector(container_adapter=container_adapter, audit_logger=audit_logger)
 
-        collector = OutputCollector(audit_logger=audit_logger)
-
-        with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-            await collector.collect(
-                container_id=CONTAINER_ID,
-                output_path_in_container=OUTPUT_PATH,
-                host_output_path=tmp_path / "host_out",
-                max_output_bytes=max_output_bytes,
-                exit_code=0,
-                session_id=SESSION_ID,
-                agent_id=AGENT_ID,
-            )
+        await collector.collect(
+            container_id=CONTAINER_ID,
+            output_path_in_container=OUTPUT_PATH,
+            host_output_path=tmp_path / "host_out",
+            max_output_bytes=max_output_bytes,
+            exit_code=0,
+            session_id=SESSION_ID,
+            agent_id=AGENT_ID,
+        )
 
     async def test_raises_output_size_limit_error(self, tmp_path: Path) -> None:
         """OutputSizeLimitError is raised when total output exceeds the limit."""

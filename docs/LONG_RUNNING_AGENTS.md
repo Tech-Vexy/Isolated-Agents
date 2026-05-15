@@ -757,6 +757,6 @@ The Isolated Agents SDK provides comprehensive support for:
 - ✅ **Count limits** to control resource usage
 
 For more information, see:
-- [Session Manager API](api/session-manager.md)
-- [Policy Configuration](api/policy.md)
-- [Sub-Agent Examples](examples/sub-agents.md)
+- [Architecture](ADAPTER_ARCHITECTURE.md)
+- [Production Ready Summary](PRODUCTION_READY_SUMMARY.md)
+- [Examples Catalog](EXAMPLES_CATALOG.md)

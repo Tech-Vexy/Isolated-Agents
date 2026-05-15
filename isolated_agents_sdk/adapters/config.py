@@ -65,11 +65,15 @@ class AdapterConfig:
     
     # Storage adapter configuration
     storage_adapter: str = "local"
-    storage_config: Dict[str, Any] = field(default_factory=dict)
+    storage_config: Dict[str, Any] = field(
+        default_factory=lambda: {"base_path": "./.isolated_agents/storage"}
+    )
     
     # Audit adapter configuration
     audit_adapter: str = "file"
-    audit_config: Dict[str, Any] = field(default_factory=dict)
+    audit_config: Dict[str, Any] = field(
+        default_factory=lambda: {"log_path": "./.isolated_agents/logs"}
+    )
     
     # Policy adapter configuration
     policy_adapter: str = "default"

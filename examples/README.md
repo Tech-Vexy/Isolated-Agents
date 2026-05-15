@@ -346,7 +346,7 @@ if __name__ == "__main__":
 
 ## 🔗 Related Resources
 
-- [GitHub Repository](https://github.com/isolated-agents/sdk)
+- [GitHub Repository](https://github.com/Tech-Vexy/Isolated-Agents)
 - [Documentation](https://docs.isolated-agents.dev)
 - [API Reference](https://docs.isolated-agents.dev/api)
 - [Community Forum](https://community.isolated-agents.dev)

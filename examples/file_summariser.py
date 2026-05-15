@@ -66,6 +66,7 @@ def summarise_files() -> None:
     llm = ChatGroq(
         model="llama-3.3-70b-versatile",
         api_key=os.environ["GROQ_API_KEY"],
+        base_url=os.environ.get("GROQ_API_BASE"),
     )
 
     messages = [
@@ -90,9 +91,12 @@ def summarise_files() -> None:
 
 def main() -> None:
     from dotenv import load_dotenv
-    load_dotenv()
+    # Load from examples/.env
+    env_path = Path(__file__).parent / ".env"
+    load_dotenv(dotenv_path=env_path)
 
     api_key = os.environ.get("GROQ_API_KEY")
+    api_base = os.environ.get("GROQ_API_BASE", "https://api.groq.com/openai/v1")
     if not api_key:
         print("Error: GROQ_API_KEY environment variable is not set.", file=sys.stderr)
         sys.exit(1)
@@ -111,8 +115,8 @@ def main() -> None:
 
     policy = Policy(
         network=NetworkPolicy(disabled=False),
-        allowed_env_vars=["GROQ_API_KEY"],
-        pip_packages=["langchain-groq", "langchain-core"],
+        allowed_env_vars=["GROQ_API_KEY", "GROQ_API_BASE"],
+        pip_packages=["langchain-groq", "langchain-core", "cloudpickle"],
         output_path_in_container="/output",
     )
 

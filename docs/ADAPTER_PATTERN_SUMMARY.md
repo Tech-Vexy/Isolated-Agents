@@ -560,3 +560,7 @@ For questions or issues:
 - Review the examples
 - Open an issue on GitHub
 - Consult the extension guide for custom adapters
+
+---
+
+**Built with IBM BOB** 🤖

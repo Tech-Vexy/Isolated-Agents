@@ -4,10 +4,10 @@
   <img src="assets/logo.svg" alt="Isolated Agents SDK" width="200"/>
   <p><strong>Production-ready SDK for running AI agents in isolated containers</strong></p>
   <p>
-    <a href="https://github.com/isolated-agents/sdk"><img src="https://img.shields.io/github/stars/isolated-agents/sdk?style=social" alt="GitHub stars"/></a>
+    <a href="https://github.com/Tech-Vexy/Isolated-Agents"><img src="https://img.shields.io/github/stars/isolated-agents/sdk?style=social" alt="GitHub stars"/></a>
     <a href="https://pypi.org/project/isolated-agents-sdk/"><img src="https://img.shields.io/pypi/v/isolated-agents-sdk" alt="PyPI version"/></a>
     <a href="https://pypi.org/project/isolated-agents-sdk/"><img src="https://img.shields.io/pypi/pyversions/isolated-agents-sdk" alt="Python versions"/></a>
-    <a href="https://github.com/isolated-agents/sdk/blob/main/LICENSE"><img src="https://img.shields.io/github/license/isolated-agents/sdk" alt="License"/></a>
+    <a href="https://github.com/Tech-Vexy/Isolated-Agents/blob/main/LICENSE"><img src="https://img.shields.io/github/license/isolated-agents/sdk" alt="License"/></a>
   </p>
 </div>
 
@@ -253,11 +253,10 @@ See the [Quick Start Guide](quick-start.md) for more details.
 ## Documentation
 
 - **[Getting Started](getting-started.md)** - Installation and first steps
-- **[Core Concepts](concepts/overview.md)** - Understanding the SDK
+- **[Core Concepts](PRODUCTION_READY_SUMMARY.md)** - Understanding the SDK
 - **[Architecture](ADAPTER_ARCHITECTURE.md)** - System design
 - **[Examples](EXAMPLES_CATALOG.md)** - 81+ working examples
-- **[API Reference](api/overview.md)** - Complete API documentation
-- **[Guides](guides/best-practices.md)** - Best practices and patterns
+- **[Implementation](QUICKSTART_ADAPTERS.md)** - Implementation guides
 
 ---
 
@@ -309,7 +308,7 @@ See [all examples](EXAMPLES_CATALOG.md) for more.
 
 ## Community
 
-- **[GitHub](https://github.com/isolated-agents/sdk)** - Source code and issues
+- **[GitHub](https://github.com/Tech-Vexy/Isolated-Agents)** - Source code and issues
 - **[Discord](https://discord.gg/isolated-agents)** - Community chat
 - **[Twitter](https://twitter.com/isolated_agents)** - Updates and news
 - **[Forum](https://community.isolated-agents.dev)** - Discussions
@@ -318,20 +317,20 @@ See [all examples](EXAMPLES_CATALOG.md) for more.
 
 ## Contributing
 
-We welcome contributions! See our [Contributing Guide](community/contributing.md) for details.
+We welcome contributions! Please see our GitHub repository for more details.
 
 ---
 
 ## License
 
-Isolated Agents SDK is licensed under the [MIT License](about/license.md).
+Isolated Agents SDK is licensed under the MIT License.
 
 ---
 
 ## Support
 
 - **Documentation**: [docs.isolated-agents.dev](https://docs.isolated-agents.dev)
-- **Issues**: [GitHub Issues](https://github.com/isolated-agents/sdk/issues)
+- **Issues**: [GitHub Issues](https://github.com/Tech-Vexy/Isolated-Agents/issues)
 - **Discord**: [Join our community](https://discord.gg/isolated-agents)
 - **Email**: support@isolated-agents.dev
 
@@ -340,7 +339,11 @@ Isolated Agents SDK is licensed under the [MIT License](about/license.md).
 <div align="center">
   <p>Made with ❤️ by the Isolated Agents team</p>
   <p>
-    <a href="https://github.com/isolated-agents/sdk">GitHub</a> •
+    Built with <a href="https://bob.ibm.com" target="_blank" rel="noopener">IBM BOB</a> 
+    <img src="https://bob.ibm.com/images/static_torso_fragment.svg" alt="IBM BOB Logo" width="30" style="vertical-align: middle; margin-left: 10px;">
+  </p>
+  <p>
+    <a href="https://github.com/Tech-Vexy/Isolated-Agents">GitHub</a> •
     <a href="https://docs.isolated-agents.dev">Documentation</a> •
     <a href="https://discord.gg/isolated-agents">Discord</a> •
     <a href="https://twitter.com/isolated_agents">Twitter</a>

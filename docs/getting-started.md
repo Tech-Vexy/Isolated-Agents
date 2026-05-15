@@ -31,7 +31,7 @@ uv pip install isolated-agents-sdk
 ### From source
 
 ```bash
-git clone https://github.com/isolated-agents/sdk
+git clone https://github.com/Tech-Vexy/Isolated-Agents
 cd sdk
 uv sync
 ```
@@ -264,9 +264,9 @@ print(result.artifacts)      # Dict of output files
 
 ### Learn Core Concepts
 
-- [Architecture](concepts/architecture.md) - Understand the system design
-- [Policies](concepts/policies.md) - Learn about security policies
-- [Isolation](concepts/isolation.md) - How isolation works
+- [Architecture](ADAPTER_ARCHITECTURE.md) - Understand the system design
+- [Implementation](QUICKSTART_ADAPTERS.md) - How to implement adapters
+- [Platform Support](CROSSPLATFORM_COMPATIBILITY.md) - OS compatibility
 
 ### Explore Features
 
@@ -277,14 +277,13 @@ print(result.artifacts)      # Dict of output files
 ### Try Examples
 
 - [Examples Catalog](EXAMPLES_CATALOG.md) - 81+ examples
-- [LangChain Examples](examples/langchain.md) - LangChain integration
-- [Multi-Agent Examples](examples/multi-agent.md) - Agent orchestration
+- [Adapter Implementation](COMPLETE_IMPLEMENTATION_GUIDE.md) - Comprehensive guide
 
 ### Read Guides
 
-- [Best Practices](guides/best-practices.md) - Production patterns
-- [Security](guides/security.md) - Security guidelines
-- [Testing](guides/testing.md) - Testing strategies
+- [Best Practices](QUICKSTART_ADAPTERS.md) - Production patterns
+- [Security](ADAPTER_ARCHITECTURE.md) - Security guidelines
+- [Testing](IMPLEMENTATION_PLAN.md) - Testing strategies
 
 ---
 
@@ -391,14 +390,14 @@ Error: Permission denied
 
 **Solution:** Check file permissions or use rootless Podman.
 
-See [Troubleshooting Guide](guides/troubleshooting.md) for more.
+See [Production Ready Summary](PRODUCTION_READY_SUMMARY.md) for more.
 
 ---
 
 ## Getting Help
 
 - **Documentation**: [docs.isolated-agents.dev](https://docs.isolated-agents.dev)
-- **GitHub Issues**: [github.com/isolated-agents/sdk/issues](https://github.com/isolated-agents/sdk/issues)
+- **GitHub Issues**: [github.com/Tech-Vexy/Isolated-Agents/issues](https://github.com/Tech-Vexy/Isolated-Agents/issues)
 - **Discord**: [discord.gg/isolated-agents](https://discord.gg/isolated-agents)
 - **Email**: support@isolated-agents.dev
 
@@ -409,8 +408,8 @@ See [Troubleshooting Guide](guides/troubleshooting.md) for more.
 Now that you have the basics, explore:
 
 1. **[Quick Start](quick-start.md)** - More detailed tutorial
-2. **[Core Concepts](concepts/overview.md)** - Deep dive into concepts
+2. **[Architecture](ADAPTER_ARCHITECTURE.md)** - Deep dive into architecture
 3. **[Examples](EXAMPLES_CATALOG.md)** - Learn from examples
-4. **[API Reference](api/overview.md)** - Complete API documentation
+4. **[Implementation](COMPLETE_IMPLEMENTATION_GUIDE.md)** - Complete guide
 
 Happy coding! 🚀

@@ -74,7 +74,7 @@ result = run_agent(
 
 ```bash
 # Clone repository
-git clone https://github.com/isolated-agents/sdk
+git clone https://github.com/Tech-Vexy/Isolated-Agents
 cd sdk
 
 # Install dependencies
@@ -443,7 +443,7 @@ See [ALL_EXAMPLES.md](../examples/ALL_EXAMPLES.md) for all working examples.
 ## 📚 Additional Resources
 
 ### Documentation
-- [GitHub Repository](https://github.com/isolated-agents/sdk)
+- [GitHub Repository](https://github.com/Tech-Vexy/Isolated-Agents)
 - [API Reference](https://docs.isolated-agents.dev/api)
 - [Community Forum](https://community.isolated-agents.dev)
 
@@ -453,8 +453,8 @@ See [ALL_EXAMPLES.md](../examples/ALL_EXAMPLES.md) for all working examples.
 - [Video Tutorials](https://youtube.com/isolated-agents)
 
 ### Support
-- [Issue Tracker](https://github.com/isolated-agents/sdk/issues)
-- [Discussions](https://github.com/isolated-agents/sdk/discussions)
+- [Issue Tracker](https://github.com/Tech-Vexy/Isolated-Agents/issues)
+- [Discussions](https://github.com/Tech-Vexy/Isolated-Agents/discussions)
 - [Discord Community](https://discord.gg/isolated-agents)
 
 ---

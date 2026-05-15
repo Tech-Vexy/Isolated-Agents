@@ -8,16 +8,19 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import logging
 import signal
 import subprocess
 import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
+from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
+from isolated_agents_sdk.adapters.container.podman import PodmanAdapter
 from isolated_agents_sdk.audit_logger import AuditLogger
 from isolated_agents_sdk.models import Policy, SessionInfo, SessionMetrics
-
 
 @dataclass
 class _SessionEntry:
@@ -39,12 +42,17 @@ class SessionManager:
     - Emit ``container_destroyed`` and ``resource_limit_exceeded`` audit events.
 
     Args:
+        adapter: ContainerRuntimeAdapter instance (defaults to PodmanAdapter).
         audit_logger: :class:`~isolated_agents_sdk.audit_logger.AuditLogger`
-            instance.  A default logger (writing to stderr) is created when
-            *audit_logger* is ``None``.
+            instance.
     """
 
-    def __init__(self, audit_logger: Optional[AuditLogger] = None) -> None:
+    def __init__(
+        self,
+        adapter: Optional[ContainerRuntimeAdapter] = None,
+        audit_logger: Optional[AuditLogger] = None,
+    ) -> None:
+        self._adapter = adapter or PodmanAdapter()
         self._audit_logger = audit_logger or AuditLogger()
         self._lock = threading.Lock()
         # session_id -> _SessionEntry
@@ -64,16 +72,7 @@ class SessionManager:
         process: Optional[object],
         policy: Policy,
     ) -> None:
-        """Register a new session and start its timeout watcher if needed.
-
-        Args:
-            session_id: Unique identifier for this session.
-            container_id: Podman container ID.
-            agent_id: Identifier for the agent.
-            process: The process handle for the agent process, or ``None``.
-            policy: The validated :class:`~isolated_agents_sdk.models.Policy`
-                for this session.
-        """
+        """Register a new session and start its timeout watcher if needed."""
         info = SessionInfo(
             session_id=session_id,
             container_id=container_id,
@@ -96,13 +95,7 @@ class SessionManager:
             self._start_resource_monitor(session_id)
 
     async def complete_session(self, session_id: str, exit_code: int) -> None:
-        """Mark a session as completed or failed and destroy its container.
-
-        Args:
-            session_id: The session to complete.
-            exit_code: The agent process exit code.  ``0`` → "completed",
-                anything else → "failed".
-        """
+        """Mark a session as completed or failed and destroy its container."""
         with self._lock:
             entry = self._registry.get(session_id)
             if entry is None:
@@ -124,34 +117,20 @@ class SessionManager:
         session_id: str,
         command: list[str],
     ) -> tuple[int, str, str]:
-        """Execute a command inside an existing, isolated container.
-
-        Allows iterative execution (e.g., for coding agents).
-
-        Args:
-            session_id: The active session ID.
-            command: The command list to execute via ``podman exec``.
-
-        Returns:
-            A tuple of (exit_code, stdout, stderr).
-
-        Raises:
-            RuntimeError: If the session is not active.
-        """
+        """Execute a command inside an existing, isolated container."""
         with self._lock:
             entry = self._registry.get(session_id)
             if entry is None or entry.info.status != "running":
                 raise RuntimeError(f"Session '{session_id}' is not active.")
             container_id = entry.info.container_id
 
-        proc = await asyncio.create_subprocess_exec(
-            "podman", "exec", container_id, *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        result = await self._adapter.exec_in_container(
+            container_id=container_id,
+            command=command,
+            working_dir="/workspace",
         )
-        stdout, stderr = await proc.communicate()
 
-        return proc.returncode, stdout.decode(), stderr.decode()
+        return result.exit_code, result.stdout, result.stderr
 
     async def sync_artifact(
         self,
@@ -159,99 +138,33 @@ class SessionManager:
         container_path: str,
         host_path: str | Path,
     ) -> None:
-        """Copy a specific file from a running agent's workspace to the host.
-
-        Args:
-            session_id: The active session ID.
-            container_path: Path to the file inside the container.
-            host_path: Destination path on the host.
-
-        Raises:
-            RuntimeError: If the session is not active or ``podman cp`` fails.
-        """
+        """Copy a specific file from a running agent's workspace to the host."""
         with self._lock:
             entry = self._registry.get(session_id)
             if entry is None or entry.info.status != "running":
                 raise RuntimeError(f"Session '{session_id}' is not active.")
             container_id = entry.info.container_id
 
-        proc = await asyncio.create_subprocess_exec(
-            "podman", "cp", f"{container_id}:{container_path}", str(host_path),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        _, stderr = await proc.communicate()
-
-        if proc.returncode != 0:
-            raise RuntimeError(f"Failed to sync artifact: {stderr.decode()}")
+        await self._adapter.copy_from_container(container_id, container_path, str(host_path))
 
     async def get_session_metrics(self, session_id: str) -> SessionMetrics:
-        """Query ``podman stats`` for the given session's container and return metrics.
-
-        Args:
-            session_id: The session to query.
-
-        Returns:
-            A :class:`SessionMetrics` with ``cpu_percent`` and ``memory_mb``.
-
-        Raises:
-            KeyError: If *session_id* is not found in the active registry.
-        """
+        """Query metrics for the given session's container."""
         with self._lock:
             entry = self._registry.get(session_id)
         if entry is None:
             raise KeyError(f"Session '{session_id}' not found in active registry.")
 
-        proc = await asyncio.create_subprocess_exec(
-            "podman", "stats", "--no-stream", "--format",
-            "{{.CPUPerc}},{{.MemUsage}}",
-            entry.info.container_id,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await proc.communicate()
-        
-        cpu_percent = 0.0
-        memory_mb = 0.0
-        if proc.returncode == 0:
-            line = stdout.decode().strip()
-            parts = line.split(",", 1)
-            if len(parts) == 2:
-                cpu_str, mem_str = parts
-                try:
-                    cpu_percent = float(cpu_str.strip().rstrip("%"))
-                except ValueError:
-                    pass
-                # mem_str is like "123.4MiB / 512MiB" — take the first token
-                mem_token = mem_str.strip().split()[0]
-                try:
-                    if mem_token.endswith("GiB"):
-                        memory_mb = float(mem_token[:-3]) * 1024
-                    elif mem_token.endswith("MiB"):
-                        memory_mb = float(mem_token[:-3])
-                    elif mem_token.endswith("KiB"):
-                        memory_mb = float(mem_token[:-3]) / 1024
-                    elif mem_token.endswith("kB"):
-                        memory_mb = float(mem_token[:-2]) / 1024
-                    else:
-                        memory_mb = float(mem_token)
-                except ValueError:
-                    pass
-
-        return SessionMetrics(cpu_percent=cpu_percent, memory_mb=memory_mb)
+        try:
+            stats = await self._adapter.get_container_stats(entry.info.container_id)
+            return SessionMetrics(
+                cpu_percent=stats.cpu_percent,
+                memory_mb=stats.memory_mb,
+            )
+        except Exception:
+            return SessionMetrics(cpu_percent=0.0, memory_mb=0.0)
 
     def destroy_all(self) -> None:
-        """Destroy all active containers synchronously.
-
-        Called by ``atexit`` and signal handlers to guarantee cleanup on
-        unexpected process exit.
-
-        Signal-safety note: this method is intentionally synchronous and uses
-        only ``subprocess.run`` (not asyncio) so it is safe to call from a
-        signal handler, which may fire while the event loop is running.  The
-        async path (``complete_session`` → ``destroy_container_async``) is
-        used during normal teardown; this path is the last-resort fallback.
-        """
+        """Destroy all active containers synchronously."""
         with self._lock:
             entries = list(self._registry.values())
             self._registry.clear()
@@ -269,22 +182,17 @@ class SessionManager:
         session_id: str = "",
         agent_id: str = "",
     ) -> None:
-        """Forcefully remove a Podman container asynchronously."""
+        """Forcefully remove a container asynchronously."""
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "podman", "rm", "-f", container_id,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            await proc.communicate()
-        except FileNotFoundError:
+            await self._adapter.destroy_container(container_id, force=True)
+        except Exception:
             pass
 
         self._audit_logger.log_event(
             event_type="container_destroyed",
             session_id=session_id,
             agent_id=agent_id,
-            payload={"container_id": container_id},
+            payload={"container_id": container_id, "adapter": self._adapter.get_adapter_name()},
         )
 
     def destroy_container_sync(
@@ -293,15 +201,25 @@ class SessionManager:
         session_id: str = "",
         agent_id: str = "",
     ) -> None:
-        """Forcefully remove a Podman container synchronously."""
-        try:
-            subprocess.run(
-                ["podman", "rm", "-f", container_id],
-                capture_output=True,
-                check=False,
+        """Forcefully remove a container synchronously (atexit fallback)."""
+        # For atexit, we fall back to manual podman rm -f if the adapter is PodmanAdapter
+        # and doesn't provide a sync method.
+        if isinstance(self._adapter, PodmanAdapter):
+            try:
+                subprocess.run(
+                    ["podman", "rm", "-f", container_id],
+                    capture_output=True,
+                    check=False,
+                )
+            except Exception:
+                pass
+        else:
+            # For other adapters, we might not be able to clean up synchronously easily
+            # unless we add a destroy_container_sync to the interface.
+            logger.warning(
+                "Synchronous cleanup not implemented for adapter %s",
+                self._adapter.get_adapter_name()
             )
-        except FileNotFoundError:
-            pass
 
         self._audit_logger.log_event(
             event_type="container_destroyed",
@@ -354,16 +272,7 @@ class SessionManager:
         )
 
     def _start_timeout_watcher(self, session_id: str, timeout_seconds: int) -> None:
-        """Start a watcher that fires :meth:`_timeout_session` after the timeout.
-
-        When called from within a running event loop (the normal async path),
-        an asyncio task is created.  When called from the synchronous
-        ``run_agent()`` path — where ``asyncio.run()`` creates a *new* loop
-        that is not yet running at the point ``register_session`` is called —
-        a daemon thread is used instead.  The thread creates its own event loop
-        so it can drive the async ``_timeout_session`` coroutine without
-        interfering with the caller's loop.
-        """
+        """Start a watcher that fires :meth:`_timeout_session` after the timeout."""
         async def _watcher() -> None:
             await asyncio.sleep(timeout_seconds)
             await self._timeout_session(session_id, timeout_seconds)
@@ -372,15 +281,9 @@ class SessionManager:
             loop = asyncio.get_running_loop()
             loop.create_task(_watcher())
         except RuntimeError:
-            # No running event loop at call time — use a daemon thread with
-            # its own isolated event loop.  We deliberately do NOT call
-            # asyncio.run() on the caller's loop because that loop may not
-            # exist yet (it is created by asyncio.run() in run_agent()).
             def _thread_watcher() -> None:
                 import time
                 time.sleep(timeout_seconds)
-                # Create a fresh loop for this thread; avoids "no current
-                # event loop" errors and does not touch the caller's loop.
                 loop = asyncio.new_event_loop()
                 try:
                     loop.run_until_complete(
@@ -393,13 +296,7 @@ class SessionManager:
             t.start()
 
     def _start_resource_monitor(self, session_id: str) -> None:
-        """Start an asyncio task that periodically polls ``podman stats`` and
-        emits ``resource_limit_exceeded`` audit events when CPU or memory
-        thresholds defined in the session's Policy are breached.
-
-        The monitor stops automatically when the session is no longer in the
-        registry (i.e. after :meth:`complete_session` removes it).
-        """
+        """Start an asyncio task that periodically polls adapter stats."""
         async def _monitor_loop() -> None:
             with self._lock:
                 entry = self._registry.get(session_id)
@@ -417,42 +314,18 @@ class SessionManager:
                 with self._lock:
                     entry = self._registry.get(session_id)
                 if entry is None or entry.info.status != "running":
-                    # Session completed or was terminated — stop monitoring.
                     break
 
                 container_id = entry.info.container_id
                 agent_id = entry.info.agent_id
 
                 try:
-                    proc = await asyncio.create_subprocess_exec(
-                        "podman", "stats", "--no-stream", "--format",
-                        "{{.CPUPerc}},{{.MemUsage}}",
-                        container_id,
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
-                    )
-                    stdout, _ = await proc.communicate()
+                    stats = await self._adapter.get_container_stats(container_id)
                 except Exception:
-                    # Podman unavailable or container gone — stop monitoring.
                     break
-
-                if proc.returncode != 0:
-                    break
-
-                line = stdout.decode().strip()
-                parts = line.split(",", 1)
-                if len(parts) != 2:
-                    continue
-
-                cpu_str, mem_str = parts
 
                 # --- CPU threshold check ---
-                try:
-                    cpu_pct = float(cpu_str.strip().rstrip("%"))
-                except ValueError:
-                    cpu_pct = 0.0
-
-                if cpu_pct > cpu_threshold:
+                if stats.cpu_percent > cpu_threshold:
                     self._audit_logger.log_event(
                         event_type="resource_limit_exceeded",
                         session_id=session_id,
@@ -460,31 +333,15 @@ class SessionManager:
                         payload={
                             "violation_type": "cpu_threshold_exceeded",
                             "attempted_action": "cpu_usage",
-                            "cpu_percent": cpu_pct,
+                            "cpu_percent": stats.cpu_percent,
                             "cpu_threshold_percent": cpu_threshold,
                             "container_id": container_id,
                         },
                     )
 
                 # --- Memory threshold check ---
-                # mem_str is like "123.4MiB / 512MiB" — parse the used portion.
-                mem_token = mem_str.strip().split()[0]
-                try:
-                    if mem_token.endswith("GiB"):
-                        used_mb = float(mem_token[:-3]) * 1024
-                    elif mem_token.endswith("MiB"):
-                        used_mb = float(mem_token[:-3])
-                    elif mem_token.endswith("KiB"):
-                        used_mb = float(mem_token[:-3]) / 1024
-                    elif mem_token.endswith("kB"):
-                        used_mb = float(mem_token[:-2]) / 1024
-                    else:
-                        used_mb = float(mem_token)
-                except ValueError:
-                    used_mb = 0.0
-
                 if mem_limit_mb > 0:
-                    mem_pct = (used_mb / mem_limit_mb) * 100.0
+                    mem_pct = (stats.memory_mb / mem_limit_mb) * 100.0
                     if mem_pct > mem_threshold_pct:
                         self._audit_logger.log_event(
                             event_type="resource_limit_exceeded",
@@ -493,7 +350,7 @@ class SessionManager:
                             payload={
                                 "violation_type": "memory_threshold_exceeded",
                                 "attempted_action": "memory_allocation",
-                                "memory_used_mb": round(used_mb, 2),
+                                "memory_used_mb": round(stats.memory_mb, 2),
                                 "memory_limit_mb": mem_limit_mb,
                                 "memory_percent": round(mem_pct, 2),
                                 "memory_threshold_percent": mem_threshold_pct,
@@ -505,8 +362,6 @@ class SessionManager:
             loop = asyncio.get_running_loop()
             loop.create_task(_monitor_loop())
         except RuntimeError:
-            # No running event loop — start a background thread with its own
-            # isolated loop.  Same rationale as _start_timeout_watcher.
             def _thread_monitor() -> None:
                 loop = asyncio.new_event_loop()
                 try:
@@ -526,7 +381,6 @@ class SessionManager:
 
         def _handle_sigterm(signum: int, frame: object) -> None:
             self.destroy_all()
-            # Re-raise by restoring the original handler and re-sending the signal
             if original_sigterm and callable(original_sigterm):
                 signal.signal(signal.SIGTERM, original_sigterm)
             else:
@@ -550,27 +404,7 @@ class SessionManager:
 # ---------------------------------------------------------------------------
 
 class IsolatedSession:
-    """Async context manager that owns the full lifecycle of one agent session.
-
-    Provisions a container on entry, runs the agent, collects output, and
-    guarantees container teardown on exit — even if an exception is raised.
-
-    Usage::
-
-        async with IsolatedSession(agent=my_fn, working_dir="/data") as session:
-            result = await session.run()
-            print(result.exit_code, result.artifacts)
-
-    The context manager is a thin convenience wrapper around
-    :func:`~isolated_agents_sdk.async_run_agent`.  For advanced use cases
-    (daemon mode, iterative exec) use the lower-level APIs directly.
-
-    Args:
-        agent: Callable to execute inside the container.
-        working_dir: Host path to the working directory.
-        policy: Optional :class:`~isolated_agents_sdk.models.Policy`.
-        host_output_path: Optional host directory for output artifacts.
-    """
+    """Async context manager that owns the full lifecycle of one agent session."""
 
     def __init__(
         self,
@@ -589,17 +423,10 @@ class IsolatedSession:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
-        # Nothing to clean up here — async_run_agent handles teardown
-        # internally via SessionManager.complete_session().
-        return False  # do not suppress exceptions
+        return False
 
     async def run(self):
-        """Execute the agent and return an :class:`~isolated_agents_sdk.models.AgentResult`.
-
-        Can only be called once per context-manager instance.
-        """
-        # Import here to avoid circular imports (this module is imported by
-        # __init__.py which also imports SessionManager).
+        """Execute the agent and return an :class:`~isolated_agents_sdk.models.AgentResult`."""
         from isolated_agents_sdk import async_run_agent  # noqa: PLC0415
 
         self._result = await async_run_agent(

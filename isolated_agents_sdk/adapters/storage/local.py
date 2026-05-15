@@ -57,7 +57,7 @@ class LocalStorageAdapter(StorageAdapter):
             base_path: Base directory for storage
         """
         super().__init__()
-        self._base_path = Path(base_path)
+        self._base_path = Path(base_path).absolute()
         self._initialized = False
     
     async def initialize(self) -> None:

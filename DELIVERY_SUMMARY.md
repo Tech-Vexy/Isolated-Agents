@@ -383,8 +383,8 @@ isolated_agents_sdk/
 ## 📞 Support
 
 - **Documentation:** http://localhost:8000 (after `mkdocs serve`)
-- **GitHub:** https://github.com/isolated-agents/sdk
-- **Issues:** https://github.com/isolated-agents/sdk/issues
+- **GitHub:** https://github.com/Tech-Vexy/Isolated-Agents
+- **Issues:** https://github.com/Tech-Vexy/Isolated-Agents/issues
 - **Discord:** https://discord.gg/isolated-agents
 - **Email:** support@isolated-agents.dev
 

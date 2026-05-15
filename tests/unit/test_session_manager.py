@@ -16,27 +16,27 @@ from unittest.mock import MagicMock, patch, call, AsyncMock
 
 import pytest
 
-from isolated_agents_sdk.models import Policy, SessionInfo
+from isolated_agents_sdk.models import Policy, SessionInfo, SessionMetrics
 from isolated_agents_sdk.session_manager import SessionManager
+from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
+from isolated_agents_sdk.adapters.container.types import ContainerStats
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_manager() -> SessionManager:
+async def _make_mock_adapter():
+    adapter = MagicMock(spec=ContainerRuntimeAdapter)
+    adapter.get_container_stats = AsyncMock(return_value=ContainerStats(cpu_percent=5.0, memory_mb=128.0, memory_limit_mb=512.0))
+    adapter.destroy_container = AsyncMock()
+    adapter.get_adapter_name = MagicMock(return_value="MockAdapter")
+    return adapter
+
+def _make_manager(adapter=None) -> SessionManager:
     """Return a fresh SessionManager with a mocked AuditLogger."""
     audit = MagicMock()
-    return SessionManager(audit_logger=audit)
-
-
-async def _make_mock_proc(exit_code: int = 0, stdout: bytes = b"", stderr: bytes = b""):
-    """Return a mock asyncio subprocess that finishes immediately."""
-    proc = MagicMock()
-    proc.communicate = AsyncMock(return_value=(stdout, stderr))
-    proc.wait = AsyncMock(return_value=exit_code)
-    proc.returncode = exit_code
-    return proc
+    return SessionManager(audit_logger=audit, adapter=adapter)
 
 
 def _register(
@@ -269,63 +269,47 @@ class TestGetSessionMetrics:
     and raise KeyError for unknown session IDs."""
 
     async def test_metrics_returned_for_active_session(self):
-        manager = _make_manager()
+        adapter = await _make_mock_adapter()
+        adapter.get_container_stats.return_value = ContainerStats(cpu_percent=12.5, memory_mb=256.0, memory_limit_mb=512.0)
+        manager = _make_manager(adapter=adapter)
         with patch("atexit.register"), patch("signal.signal"):
             _register(manager, session_id="s1", container_id="c1")
 
-        podman_output = b"12.5%,256.0MiB / 512MiB\n"
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=0, stdout=podman_output)
-            metrics = await manager.get_session_metrics("s1")
+        metrics = await manager.get_session_metrics("s1")
 
         assert metrics.cpu_percent == pytest.approx(12.5)
         assert metrics.memory_mb == pytest.approx(256.0)
 
     async def test_metrics_returns_session_metrics_instance(self):
-        from isolated_agents_sdk.models import SessionMetrics
-        manager = _make_manager()
+        adapter = await _make_mock_adapter()
+        manager = _make_manager(adapter=adapter)
         with patch("atexit.register"), patch("signal.signal"):
             _register(manager, session_id="s1", container_id="c1")
 
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=0, stdout=b"5.0%,128.0MiB / 512MiB\n")
-            metrics = await manager.get_session_metrics("s1")
-
+        metrics = await manager.get_session_metrics("s1")
         assert isinstance(metrics, SessionMetrics)
 
-    async def test_metrics_zero_when_podman_stats_fails(self):
-        manager = _make_manager()
+    async def test_metrics_zero_when_adapter_fails(self):
+        adapter = await _make_mock_adapter()
+        adapter.get_container_stats.side_effect = Exception("Stats failed")
+        manager = _make_manager(adapter=adapter)
         with patch("atexit.register"), patch("signal.signal"):
             _register(manager, session_id="s1", container_id="c1")
 
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=1, stdout=b"")
-            metrics = await manager.get_session_metrics("s1")
+        metrics = await manager.get_session_metrics("s1")
 
         assert metrics.cpu_percent == 0.0
         assert metrics.memory_mb == 0.0
 
-    async def test_metrics_gib_converted_to_mb(self):
-        manager = _make_manager()
+    async def test_adapter_stats_called_with_correct_container_id(self):
+        adapter = await _make_mock_adapter()
+        manager = _make_manager(adapter=adapter)
         with patch("atexit.register"), patch("signal.signal"):
-            _register(manager, session_id="s1", container_id="c1")
+            _register(manager, session_id="s1", container_id="container-abc")
 
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=0, stdout=b"3.0%,1.0GiB / 2GiB\n")
-            metrics = await manager.get_session_metrics("s1")
+        await manager.get_session_metrics("s1")
 
-        assert metrics.memory_mb == pytest.approx(1024.0)
-
-    async def test_metrics_kib_converted_to_mb(self):
-        manager = _make_manager()
-        with patch("atexit.register"), patch("signal.signal"):
-            _register(manager, session_id="s1", container_id="c1")
-
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=0, stdout=b"1.0%,512KiB / 512MiB\n")
-            metrics = await manager.get_session_metrics("s1")
-
-        assert metrics.memory_mb == pytest.approx(0.5)
+        adapter.get_container_stats.assert_called_once_with("container-abc")
 
     async def test_raises_key_error_for_unknown_session(self):
         manager = _make_manager()
@@ -343,16 +327,3 @@ class TestGetSessionMetrics:
         with pytest.raises(KeyError):
             await manager.get_session_metrics("s1")
 
-    async def test_podman_stats_called_with_correct_container_id(self):
-        manager = _make_manager()
-        with patch("atexit.register"), patch("signal.signal"):
-            _register(manager, session_id="s1", container_id="container-abc")
-
-        with patch("asyncio.create_subprocess_exec") as mock_exec:
-            mock_exec.return_value = await _make_mock_proc(exit_code=0, stdout=b"0.0%,0MiB / 512MiB\n")
-            await manager.get_session_metrics("s1")
-
-        args = mock_exec.call_args.args
-        assert "container-abc" in args
-        assert "podman" in args
-        assert "stats" in args

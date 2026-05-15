@@ -956,4 +956,4 @@ The Isolated Agents SDK supports distributed agent communication through:
 For more information, see:
 - [Long-Running Agents](LONG_RUNNING_AGENTS.md)
 - [Composability](COMPOSABILITY.md)
-- [Network Policies](api/network-policy.md)
+- [Architecture](ADAPTER_ARCHITECTURE.md)

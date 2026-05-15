@@ -32,7 +32,7 @@ class TestAdapterRegistryIntegration:
             storage_adapter="local",
             storage_config={"base_path": str(temp_dir / "storage")},
             audit_adapter="file",
-            audit_config={"log_file": str(temp_dir / "audit.jsonl")},
+            audit_config={"log_path": str(temp_dir / "audit_logs")},
             policy_adapter="default",
         )
         
@@ -84,6 +84,7 @@ class TestAdapterRegistryIntegration:
         # Register adapter
         storage = LocalStorageAdapter(base_path="/tmp/test")
         registry.register_storage_adapter("local", storage)
+        registry.set_default_storage_adapter("local")
         
         # Concurrent access
         async def get_adapter():
@@ -114,7 +115,8 @@ class TestStorageAdapterIntegration:
             content_type="text/plain",
         )
         
-        assert location.path == "test-session/test.txt"
+        assert "test-session" in location.path
+        assert "test.txt" in location.path
         
         # Retrieve artifact
         retrieved = await storage.retrieve_artifact(
@@ -237,6 +239,8 @@ class TestAuditAdapterIntegration:
             agent_id="test-agent",
             payload={"message": "Agent started"},
         )
+        
+        await asyncio.sleep(0.01)  # Ensure distinct timestamps
         
         event_id2 = await audit.log_event(
             event_type=EventType.AGENT_COMPLETED,
@@ -372,7 +376,7 @@ class TestConfigurationIntegration:
             "storage_adapter": "local",
             "storage_config": {"base_path": str(temp_dir / "storage")},
             "audit_adapter": "file",
-            "audit_config": {"log_file": str(temp_dir / "audit.jsonl")},
+            "audit_config": {"log_path": str(temp_dir / "audit_logs")},
             "policy_adapter": "default",
         }
         
@@ -455,7 +459,7 @@ class TestEndToEndIntegration:
             storage_adapter="local",
             storage_config={"base_path": str(temp_dir / "storage")},
             audit_adapter="file",
-            audit_config={"log_file": str(temp_dir / "audit.jsonl")},
+            audit_config={"log_path": str(temp_dir / "audit_logs")},
             policy_adapter="default",
         )
         

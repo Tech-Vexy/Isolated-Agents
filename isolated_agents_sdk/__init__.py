@@ -216,33 +216,15 @@ async def async_run_agent(
     host_output_path: Optional[str | Path] = None,
     adapter_config: Optional[Dict[str, Any]] = None,
 ) -> AgentResult:
-    """Launch *agent* in an isolated rootless Podman container asynchronously.
-
-    Args:
-        agent: Any callable to execute inside the container (ignored if policy.entrypoint is set).
-        working_dir: Host path to the working directory to mount into the container.
-        policy: Optional :class:`Policy` describing resource/network/fs constraints.
-        host_output_path: Optional host directory where output artifacts are written
-            and persist after this call returns.
-        adapter_config: Optional adapter configuration for this specific run.
-
-    Returns:
-        An :class:`AgentResult` with the agent's exit code and any output artifacts.
-    
-    Example:
-        >>> # Basic usage
-        >>> result = await async_run_agent(my_agent, "./workspace")
-        
-        >>> # With adapter configuration
-        >>> result = await async_run_agent(
-        ...     my_agent,
-        ...     "./workspace",
-        ...     adapter_config={"container": {"type": "podman"}}
-        ... )
-    """
+    """Launch *agent* in an isolated container asynchronously."""
     # Apply adapter configuration if provided
     if adapter_config and _ADAPTERS_AVAILABLE:
         configure_adapters(config=adapter_config)
+    
+    registry = get_adapter_registry() if _ADAPTERS_AVAILABLE else None
+    container_adapter = registry.get_container_adapter() if registry else None
+    # If host_output_path is provided, we'll let OutputCollector create a local adapter for it
+    storage_adapter = registry.get_storage_adapter() if (registry and not host_output_path) else None
     
     validated_policy = _policy_validator.validate(policy)
     audit_logger = AuditLogger(log_output_path=validated_policy.log_output_path)
@@ -253,7 +235,10 @@ async def async_run_agent(
     else:
         agent_id = getattr(agent, "__name__", "agent")
 
-    provisioner = ContainerProvisioner(audit_logger=audit_logger)
+    provisioner = ContainerProvisioner(
+        adapter=container_adapter,
+        audit_logger=audit_logger
+    )
     handle = await provisioner.provision(
         working_dir=working_dir,
         policy=validated_policy,
@@ -261,14 +246,22 @@ async def async_run_agent(
         agent_id=agent_id,
     )
 
-    runner = AgentRunner(handle=handle, audit_logger=audit_logger)
+    runner = AgentRunner(
+        handle=handle,
+        adapter=container_adapter,
+        audit_logger=audit_logger
+    )
+
+    # Update global session manager with current adapter if needed
+    if container_adapter:
+        _session_manager._adapter = container_adapter
 
     # Register the session so cleanup handlers are in place before execution
     _session_manager.register_session(
         session_id=session_id,
         container_id=handle.container_id,
         agent_id=agent_id,
-        process=None,  # updated below if needed
+        process=None,
         policy=validated_policy,
     )
 
@@ -284,10 +277,13 @@ async def async_run_agent(
         exit_code = run_result.exit_code
 
         # Collect output artifacts from the container.
-        collector = OutputCollector(audit_logger=audit_logger)
+        collector = OutputCollector(
+            container_adapter=container_adapter,
+            storage_adapter=storage_adapter,
+            audit_logger=audit_logger
+        )
         
         # If host_output_path is not provided, create a temporary directory
-        # that will PERSIST until the caller cleans it up.
         effective_host_output_path = host_output_path
         if effective_host_output_path is None:
             effective_host_output_path = tempfile.mkdtemp(prefix="agent_output_")

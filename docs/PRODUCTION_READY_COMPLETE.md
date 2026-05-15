@@ -545,7 +545,7 @@ The SDK is ready for production deployment with enterprise-grade features:
 ### Website
 
 - [Documentation Website](https://docs.isolated-agents.dev) - Complete documentation
-- [GitHub Repository](https://github.com/isolated-agents/sdk) - Source code
+- [GitHub Repository](https://github.com/Tech-Vexy/Isolated-Agents) - Source code
 
 ---
 
@@ -553,3 +553,7 @@ The SDK is ready for production deployment with enterprise-grade features:
 **Version**: 1.0.0  
 **Last Updated**: 2026-05-15  
 **Total Lines**: 14,494 (implementation + docs + examples + tests)
+
+---
+
+**Built with IBM BOB** 🤖

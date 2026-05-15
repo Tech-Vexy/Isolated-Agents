@@ -529,6 +529,6 @@ Use `mkdocs build --strict` to catch broken links.
 
 For help with documentation:
 
-- **GitHub Issues**: [github.com/isolated-agents/sdk/issues](https://github.com/isolated-agents/sdk/issues)
+- **GitHub Issues**: [github.com/Tech-Vexy/Isolated-Agents/issues](https://github.com/Tech-Vexy/Isolated-Agents/issues)
 - **Discord**: [discord.gg/isolated-agents](https://discord.gg/isolated-agents)
 - **Email**: docs@isolated-agents.dev

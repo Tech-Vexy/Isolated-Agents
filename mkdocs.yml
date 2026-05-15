@@ -3,10 +3,11 @@
 site_name: Isolated Agents SDK
 site_description: Production-ready SDK for running AI agents in isolated containers
 site_author: Isolated Agents Team
-site_url: https://docs.isolated-agents.dev
+site_url: https://isolated-agents.vercel.app
 
-repo_name: isolated-agents/sdk
-repo_url: https://github.com/isolated-agents/sdk
+
+repo_name: Tech-Vexy/Isolated-Agents
+repo_url: https://github.com/Tech-Vexy/Isolated-Agents
 edit_uri: edit/main/docs/
 
 theme:
@@ -55,22 +56,13 @@ theme:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/isolated-agents/sdk
-    - icon: fontawesome/brands/discord
-      link: https://discord.gg/isolated-agents
+      link: https://github.com/Tech-Vexy/Isolated-Agents
     - icon: fontawesome/brands/twitter
-      link: https://twitter.com/isolated_agents
-  analytics:
-    provider: google
-    property: G-XXXXXXXXXX
-  version:
-    provider: mike
-
-extra_css:
-  - stylesheets/extra.css
-
-extra_javascript:
-  - javascripts/extra.js
+      link: https://twitter.com/EVeldrine
+  
+copyright: |
+  Built with <a href="https://bob.ibm.com" target="_blank" rel="noopener">IBM BOB</a> 
+  <img src="https://bob.ibm.com/images/static_torso_fragment.svg" alt="IBM BOB Logo" width="20" style="vertical-align: middle; margin-left: 5px;">
 
 markdown_extensions:
   - abbr
@@ -129,17 +121,9 @@ nav:
     - index.md
     - Getting Started: getting-started.md
     - Quick Start: quick-start.md
-    - Installation: installation.md
-  
-  - Core Concepts:
-    - Overview: concepts/overview.md
-    - Architecture: concepts/architecture.md
-    - Policies: concepts/policies.md
-    - Isolation: concepts/isolation.md
-    - Security: concepts/security.md
   
   - Architecture:
-    - Production Ready: PRODUCTION_READY_SUMMARY.md
+    - Overview: PRODUCTION_READY_SUMMARY.md
     - Adapter Pattern: ADAPTER_ARCHITECTURE.md
     - Adapter Summary: ADAPTER_PATTERN_SUMMARY.md
     - Architecture Diagrams: ARCHITECTURE_DIAGRAM.md
@@ -168,56 +152,8 @@ nav:
   
   - Examples:
     - Overview: EXAMPLES_CATALOG.md
-    - All Examples: ../examples/ALL_EXAMPLES.md
-    - Examples README: ../examples/README.md
-    - Adapters:
-      - Adapter Examples: ../examples/adapters/README.md
-      - Basic Usage: ../examples/adapters/basic_usage.py
-      - API Usage: ../examples/adapters/api_usage.py
-      - Configuration: ../examples/adapters/config.yaml
-    - Python Frameworks:
-      - LangChain: examples/langchain.md
-      - CrewAI: examples/crewai.md
-      - AutoGPT: examples/autogpt.md
-      - LlamaIndex: examples/llamaindex.md
-    - Polyglot:
-      - Node.js: examples/nodejs.md
-      - Go: examples/go.md
-      - Rust: examples/rust.md
-      - Java: examples/java.md
-    - Scenarios:
-      - Web Scraping: examples/web-scraping.md
-      - Data Analysis: examples/data-analysis.md
-      - Code Generation: examples/code-generation.md
-      - Multi-Agent: examples/multi-agent.md
   
-  - API Reference:
-    - Overview: api/overview.md
-    - run_agent: api/run-agent.md
-    - Policy: api/policy.md
-    - NetworkPolicy: api/network-policy.md
-    - AgentResult: api/agent-result.md
-    - Adapters: api/adapters.md
-    - Decorators: api/decorators.md
-  
-  - Guides:
-    - Best Practices: guides/best-practices.md
-    - Security: guides/security.md
-    - Performance: guides/performance.md
-    - Testing: guides/testing.md
-    - Deployment: guides/deployment.md
-    - Troubleshooting: guides/troubleshooting.md
-  
-  - Community:
-    - Contributing: community/contributing.md
-    - Code of Conduct: community/code-of-conduct.md
-    - Changelog: community/changelog.md
-    - Roadmap: community/roadmap.md
-    - FAQ: community/faq.md
-  
-  - About:
-    - License: about/license.md
-    - Team: about/team.md
-    - Contact: about/contact.md
+  - Deployment:
+    - Website Deployment: WEBSITE_DEPLOYMENT.md
 
 # Made with Bob

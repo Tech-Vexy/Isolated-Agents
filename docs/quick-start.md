@@ -113,9 +113,9 @@ Browse [81+ examples](EXAMPLES_CATALOG.md) for:
 ## Next Steps
 
 - [Getting Started Guide](getting-started.md) - Detailed tutorial
-- [Core Concepts](concepts/overview.md) - Understand the architecture
+- [Architecture](ADAPTER_ARCHITECTURE.md) - Understand the architecture
 - [Examples](EXAMPLES_CATALOG.md) - Learn from examples
-- [API Reference](api/overview.md) - Complete API docs
+- [Implementation Guide](COMPLETE_IMPLEMENTATION_GUIDE.md) - Detailed technical guide
 
 ---
 
@@ -140,5 +140,5 @@ pytest tests/
 ## Need Help?
 
 - **Docs**: [docs.isolated-agents.dev](https://docs.isolated-agents.dev)
-- **GitHub**: [github.com/isolated-agents/sdk](https://github.com/isolated-agents/sdk)
+- **GitHub**: [github.com/Tech-Vexy/Isolated-Agents](https://github.com/Tech-Vexy/Isolated-Agents)
 - **Discord**: [discord.gg/isolated-agents](https://discord.gg/isolated-agents)

@@ -24,6 +24,7 @@ from isolated_agents_sdk.adapters.exceptions import (
     AdapterInitializationError,
     AdapterOperationError,
 )
+from isolated_agents_sdk.exceptions import PodmanNotFoundError
 
 DEFAULT_IMAGE = "python:3.11-slim"
 _PODMAN_TIMEOUT_SECONDS = 300
@@ -52,11 +53,23 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         
         # Check if Podman is installed
         if shutil.which("podman") is None:
-            raise AdapterInitializationError(
+            raise PodmanNotFoundError(
                 "Podman is not installed or not accessible on PATH. "
                 "Please install Podman to use this adapter."
             )
         
+        # Verify connectivity
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "podman",
+                "--version",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            await proc.wait()
+        except Exception as e:
+            raise PodmanNotFoundError(f"Failed to execute Podman: {e}") from e
+
         # Verify cgroups v2 support
         await self._check_cgroups_v2()
         
@@ -66,6 +79,10 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         """Cleanup adapter resources."""
         self._initialized = False
     
+    async def health_check(self) -> bool:
+        """Check if the adapter is healthy and ready to use."""
+        return await self.check_availability()
+
     async def check_availability(self) -> bool:
         """Check if Podman is available and accessible."""
         try:
@@ -226,13 +243,19 @@ class PodmanAdapter(ContainerRuntimeAdapter):
                 f"Failed to get container stats: {stderr.decode()}"
             )
         
-        stats_data = json.loads(stdout.decode())[0]
+        try:
+            stats_list = json.loads(stdout.decode())
+            if not stats_list:
+                return ContainerStats(cpu_percent=0.0, memory_mb=0.0, memory_limit_mb=0.0)
+            stats_data = stats_list[0]
+        except (json.JSONDecodeError, IndexError):
+            return ContainerStats(cpu_percent=0.0, memory_mb=0.0, memory_limit_mb=0.0)
         
         return ContainerStats(
             cpu_percent=float(stats_data.get("CPUPerc", "0").rstrip("%")),
             memory_mb=self._parse_memory(stats_data.get("MemUsage", "0B")),
             memory_limit_mb=self._parse_memory(stats_data.get("MemLimit", "0B")),
-            network_rx_bytes=0,  # Not available in basic stats
+            network_rx_bytes=0,
             network_tx_bytes=0,
         )
     
@@ -284,8 +307,11 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         if security_config.user:
             cmd.append(f"--user={security_config.user}")
         else:
-            uid = getattr(os, "getuid", lambda: 1000)()
-            gid = getattr(os, "getgid", lambda: 1000)()
+            try:
+                uid = os.getuid()
+                gid = os.getgid()
+            except AttributeError:
+                uid, gid = 1000, 1000
             cmd.append(f"--user={uid}:{gid}")
         
         # Capabilities
@@ -303,18 +329,19 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             cmd.append("--read-only")
             cmd.extend(["--tmpfs", "/tmp:rw,noexec,nosuid,size=64m"])
             cmd.extend(["--tmpfs", "/run:rw,noexec,nosuid,size=32m"])
+            cmd.extend(["--tmpfs", "/output:rw,noexec,nosuid,size=128m"])
         
         # Network
         if network_config.disabled:
             cmd.append("--network=none")
         else:
+            # Use the default 'podman' network name for rootless compatibility on Windows
+            cmd.append("--network=podman")
+            
             if network_config.allowed_endpoints:
-                cmd.append("--network=slirp4netns:allow_host_loopback=false")
                 for endpoint in network_config.allowed_endpoints:
                     host = endpoint.split(":")[0]
                     cmd.extend(["--add-host", f"{host}:{host}"])
-            else:
-                cmd.append("--network=slirp4netns")
         
         # Resources
         cmd.append(f"--cpus={resource_limits.cpu_cores}")
@@ -371,8 +398,11 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         
         except asyncio.TimeoutError:
             if proc:
-                proc.kill()
-                await proc.wait()
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:
+                    pass
             raise AdapterOperationError(
                 f"Podman command timed out after {timeout}s: {' '.join(cmd)}"
             )
@@ -398,5 +428,3 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         elif mem_str.endswith("B"):
             return float(mem_str[:-1]) / (1024 * 1024)
         return 0.0
-
-# Made with Bob

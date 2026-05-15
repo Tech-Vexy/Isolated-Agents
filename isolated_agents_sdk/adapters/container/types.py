@@ -16,7 +16,7 @@ class ContainerHandle:
         created_at: ISO 8601 timestamp of container creation
     """
     container_id: str
-    image: str
+    image: str = ""
     created_at: str = ""
 
 

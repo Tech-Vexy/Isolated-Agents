@@ -585,3 +585,7 @@ The adapter-aware public API provides:
 - **Well-documented** - comprehensive examples and guides
 
 Start simple with defaults, then add adapter configuration as your needs grow.
+
+---
+
+**Built with IBM BOB** 🤖

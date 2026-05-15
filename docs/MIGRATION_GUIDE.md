@@ -537,9 +537,9 @@ result = await container.create_container(...)  # May fail silently
 ## Support
 
 For questions or issues during migration:
-- Check [`examples/adapters/`](../examples/adapters/) for working examples
-- Review [`docs/ADAPTER_ARCHITECTURE.md`](ADAPTER_ARCHITECTURE.md) for architecture details
-- See [`docs/EXTENDING_ADAPTERS.md`](EXTENDING_ADAPTERS.md) for custom adapters
+- Check [Examples Catalog](EXAMPLES_CATALOG.md) for working examples
+- Review [Adapter Architecture](ADAPTER_ARCHITECTURE.md) for architecture details
+- See [Extending Adapters](EXTENDING_ADAPTERS.md) for custom adapters
 - Open an issue on GitHub for help
 
 ## Summary

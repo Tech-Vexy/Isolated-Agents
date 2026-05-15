@@ -20,7 +20,10 @@ from isolated_agents_sdk import (
     start_agent_daemon,
     exec_in_session,
     sync_artifact,
+    get_adapter_registry,
+    configure_adapters,
 )
+from isolated_agents_sdk.adapters import AdapterRegistry
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -71,6 +74,8 @@ def _make_fake_podman_exec(container_id: str = "test-container-abc123"):
                         pass
             elif subcmd == "rm":
                 exit_code = 0
+            elif subcmd == "--version":
+                stdout = b"podman version 4.6.0\n"
 
         return await _make_mock_proc(exit_code, stdout, stderr)
 
@@ -83,12 +88,19 @@ def working_dir(tmp_path):
     return d
 
 @pytest.fixture(autouse=True)
+def reset_registry():
+    """Reset the global AdapterRegistry between tests."""
+    AdapterRegistry.reset_instance()
+    yield
+    AdapterRegistry.reset_instance()
+
+@pytest.fixture(autouse=True)
 def mock_podman():
     """Automatically mock podman for all tests in this file."""
     fake_exec = _make_fake_podman_exec()
     with patch("shutil.which", return_value="/usr/bin/podman"), \
          patch("asyncio.create_subprocess_exec", side_effect=fake_exec), \
-         patch("isolated_agents_sdk.agent_runner.AgentRunner._stream_output", new_callable=AsyncMock):
+         patch("isolated_agents_sdk.agent_runner.AgentRunner._monitor_privilege_escalation", new_callable=AsyncMock):
         yield
 
 # ---------------------------------------------------------------------------

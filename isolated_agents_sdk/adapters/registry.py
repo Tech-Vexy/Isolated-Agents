@@ -62,7 +62,7 @@ class AdapterRegistry:
     """
     
     _instance: Optional["AdapterRegistry"] = None
-    _lock = threading.Lock()
+    _lock = threading.RLock()
     
     def __init__(self) -> None:
         """Initialize the adapter registry.
@@ -80,6 +80,7 @@ class AdapterRegistry:
         self._default_policy: Optional[str] = None
         
         self._initialized = False
+        self._lock = threading.RLock()
     
     @classmethod
     def get_instance(cls) -> "AdapterRegistry":
@@ -123,36 +124,48 @@ class AdapterRegistry:
                 return
             
             # Create and register container adapter
-            container = AdapterFactory.create_container_adapter(
-                config.container_adapter,
-                **config.container_config
-            )
-            self.register_container_adapter(config.container_adapter, container)
-            self._default_container = config.container_adapter
+            if config.container_adapter not in self._container_adapters:
+                container = AdapterFactory.create_container_adapter(
+                    config.container_adapter,
+                    **config.container_config
+                )
+                self.register_container_adapter(config.container_adapter, container)
+            
+            if self._default_container is None:
+                self._default_container = config.container_adapter
             
             # Create and register storage adapter
-            storage = AdapterFactory.create_storage_adapter(
-                config.storage_adapter,
-                **config.storage_config
-            )
-            self.register_storage_adapter(config.storage_adapter, storage)
-            self._default_storage = config.storage_adapter
+            if config.storage_adapter not in self._storage_adapters:
+                storage = AdapterFactory.create_storage_adapter(
+                    config.storage_adapter,
+                    **config.storage_config
+                )
+                self.register_storage_adapter(config.storage_adapter, storage)
+            
+            if self._default_storage is None:
+                self._default_storage = config.storage_adapter
             
             # Create and register audit adapter
-            audit = AdapterFactory.create_audit_adapter(
-                config.audit_adapter,
-                **config.audit_config
-            )
-            self.register_audit_adapter(config.audit_adapter, audit)
-            self._default_audit = config.audit_adapter
+            if config.audit_adapter not in self._audit_adapters:
+                audit = AdapterFactory.create_audit_adapter(
+                    config.audit_adapter,
+                    **config.audit_config
+                )
+                self.register_audit_adapter(config.audit_adapter, audit)
+            
+            if self._default_audit is None:
+                self._default_audit = config.audit_adapter
             
             # Create and register policy adapter
-            policy = AdapterFactory.create_policy_adapter(
-                config.policy_adapter,
-                **config.policy_config
-            )
-            self.register_policy_adapter(config.policy_adapter, policy)
-            self._default_policy = config.policy_adapter
+            if config.policy_adapter not in self._policy_adapters:
+                policy = AdapterFactory.create_policy_adapter(
+                    config.policy_adapter,
+                    **config.policy_config
+                )
+                self.register_policy_adapter(config.policy_adapter, policy)
+            
+            if self._default_policy is None:
+                self._default_policy = config.policy_adapter
             
             self._initialized = True
     
@@ -193,6 +206,9 @@ class AdapterRegistry:
             >>> adapter = registry.get_container_adapter()
             >>> adapter = registry.get_container_adapter("podman")
         """
+        if not self._initialized and name is None:
+            self.initialize_from_config(AdapterConfig())
+
         with self._lock:
             if name is None:
                 name = self._default_container
@@ -265,6 +281,9 @@ class AdapterRegistry:
             >>> adapter = registry.get_storage_adapter()
             >>> adapter = registry.get_storage_adapter("local")
         """
+        if not self._initialized and name is None:
+            self.initialize_from_config(AdapterConfig())
+
         with self._lock:
             if name is None:
                 name = self._default_storage
@@ -337,6 +356,9 @@ class AdapterRegistry:
             >>> adapter = registry.get_audit_adapter()
             >>> adapter = registry.get_audit_adapter("file")
         """
+        if not self._initialized and name is None:
+            self.initialize_from_config(AdapterConfig())
+
         with self._lock:
             if name is None:
                 name = self._default_audit
@@ -409,6 +431,9 @@ class AdapterRegistry:
             >>> adapter = registry.get_policy_adapter()
             >>> adapter = registry.get_policy_adapter("default")
         """
+        if not self._initialized and name is None:
+            self.initialize_from_config(AdapterConfig())
+
         with self._lock:
             if name is None:
                 name = self._default_policy
