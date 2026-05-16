@@ -16,6 +16,8 @@ import sys
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import signal as _sig
+import sys
 
 
 def create_sample_data():
@@ -31,7 +33,7 @@ def create_sample_data():
     }
     df = pd.DataFrame(data)
     df.to_csv(workspace / "large_dataset.csv", index=False)
-    print(f"✓ Created sample dataset with {len(df)} rows")
+    print(f"[*] Created sample dataset with {len(df)} rows")
 
 
 def data_processor():
@@ -39,19 +41,19 @@ def data_processor():
     import pandas as pd
     from pathlib import Path
     import time
-    import signal
+    import signal as sig
     import sys
     
-    shutdown_requested = False
+    state = {'shutdown': False}
     
     def signal_handler(signum, frame):
-        nonlocal shutdown_requested
-        shutdown_requested = True
-        print("\n⚠ Shutdown requested, finishing current batch...")
+        state['shutdown'] = True
+        sys.stdout.write("\n[!] Shutdown requested, finishing current batch...\n")
+        sys.stdout.flush()
     
     # Register signal handlers for graceful shutdown
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
+    sig.signal(sig.SIGTERM, signal_handler)
+    sig.signal(sig.SIGINT, signal_handler)
     
     output_dir = Path("/output")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -71,7 +73,7 @@ def data_processor():
         
         # Process in batches
         for i in range(0, total_rows, batch_size):
-            if shutdown_requested:
+            if state['shutdown']:
                 print(f"Stopping at batch {i//batch_size + 1}")
                 break
             
@@ -90,7 +92,7 @@ def data_processor():
             # Log progress every 10 batches
             batch_num = i // batch_size + 1
             if batch_num % 10 == 0:
-                print(f"✓ Processed {processed_count}/{total_rows} rows ({progress:.1f}%)")
+                print(f"[*] Processed {processed_count}/{total_rows} rows ({progress:.1f}%)")
             
             # Simulate processing time
             time.sleep(0.5)
@@ -108,29 +110,29 @@ def data_processor():
 Total rows: {total_rows}
 Processed rows: {processed_count}
 Batches: {len(results)}
-Status: {'Interrupted' if shutdown_requested else 'Completed'}
+Status: {'Interrupted' if state['shutdown'] else 'Completed'}
 
 Statistics by Category:
 {final_stats.to_string()}
 """
             (output_dir / "summary.txt").write_text(summary)
             
-            print(f"\n✓ Processing {'interrupted' if shutdown_requested else 'completed'}")
-            print(f"✓ Processed {processed_count}/{total_rows} rows")
+            print(f"\n[*] Processing {'interrupted' if state['shutdown'] else 'completed'}")
+            print(f"[*] Processed {processed_count}/{total_rows} rows")
         
     except Exception as e:
         error_msg = f"Error during processing: {str(e)}"
         (output_dir / "error.txt").write_text(error_msg)
-        print(f"✗ {error_msg}")
+        print(f"[!] {error_msg}")
         raise
     
     finally:
         # Cleanup
-        print("✓ Cleanup completed")
+        print("[*] Cleanup completed")
 
 
 if __name__ == "__main__":
-    from isolated_agents_sdk import run_agent, Policy
+    from isolated_agents_sdk import run_agent, Policy, NetworkPolicy
     
     # Create sample data
     create_sample_data()
@@ -147,6 +149,8 @@ if __name__ == "__main__":
         working_dir="./workspace",
         host_output_path=output,
         policy=Policy(
+            base_image="python:3.12-slim",
+            network=NetworkPolicy(disabled=False),
             timeout_seconds=3600,  # 1 hour timeout
             cpu_cores=2.0,
             memory_mb=2048,

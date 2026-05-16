@@ -152,13 +152,17 @@ class AgentRunner:
             await self._inject_bootstrap(container_id)
 
             # 3. Install any agent-requested packages inside the container
-            if policy.pip_packages:
-                await self._install_pip_packages(
-                    container_id=container_id,
-                    packages=policy.pip_packages,
-                    index_url=policy.pip_index_url,
-                    require_hashes=policy.pip_require_hashes,
-                )
+            # We always need cloudpickle for the bootstrap script to work
+            packages_to_install = list(policy.pip_packages)
+            if "cloudpickle" not in [p.split("==")[0].split(">=")[0].strip() for p in packages_to_install]:
+                packages_to_install.append("cloudpickle")
+
+            await self._install_pip_packages(
+                container_id=container_id,
+                packages=packages_to_install,
+                index_url=policy.pip_index_url,
+                require_hashes=policy.pip_require_hashes,
+            )
 
             if policy.requires_display:
                 xvfb_cmd = "Xvfb :99 -screen 0 1280x1024x24 & export DISPLAY=:99 && sleep 1 && "
@@ -166,6 +170,9 @@ class AgentRunner:
                 command = ["sh", "-c", final_cmd]
             else:
                 command = ["python3", _CONTAINER_BOOTSTRAP_PATH]
+            
+            # Ensure the installed packages are in PYTHONPATH
+            env["PYTHONPATH"] = f"/tmp/site-packages:{env.get('PYTHONPATH', '')}".strip(":")
 
         # 4. Launch the agent via the adapter
         # We need to handle streaming separately if the adapter doesn't support it directly in exec_in_container.
@@ -288,7 +295,7 @@ class AgentRunner:
         index_url: Optional[str],
         require_hashes: bool,
     ) -> None:
-        """Install *packages* inside the container with hardened pip flags."""
+        """Install *packages* inside the container into a writable /tmp location."""
         import re
 
         _SAFE_SPECIFIER = re.compile(
@@ -300,19 +307,40 @@ class AgentRunner:
                     f"pip package specifier contains unsafe characters: {spec!r}."
                 )
 
-        pip_cmd = ["pip", "install", "--quiet"]
+        # Install to /tmp/site-packages because rootfs might be read-only.
+        # Set HOME=/tmp to avoid pip trying to write to /root.
+        pip_cmd = [
+            "python3", "-m", "pip", "install", 
+            "--no-cache-dir", 
+            "--target", "/tmp/site-packages",
+            "--retries", "10",
+            "--default-timeout", "180"
+        ]
         if index_url is not None:
             pip_cmd.extend(["--index-url", index_url])
         if require_hashes:
             pip_cmd.append("--require-hashes")
         pip_cmd.extend(packages)
 
-        result = await self._adapter.exec_in_container(container_id, pip_cmd)
+        env = {
+            "HOME": "/tmp",
+            "PIP_BREAK_SYSTEM_PACKAGES": "1"
+        }
+        
+        result = await self._adapter.exec_in_container(
+            container_id=container_id, 
+            command=pip_cmd,
+            env=env,
+            user="root",
+            timeout=600
+        )
 
         if result.exit_code != 0:
             raise RuntimeError(
                 f"pip install failed (exit {result.exit_code}) for packages "
-                f"{packages!r}.\nstderr: {result.stderr}"
+                f"{packages!r}.\n"
+                f"stdout: {result.stdout}\n"
+                f"stderr: {result.stderr}"
             )
 
     async def _inject_source(

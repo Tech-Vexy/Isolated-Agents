@@ -46,14 +46,32 @@ class FileAuditAdapter(AuditAdapter):
         ... )
     """
     
-    def __init__(self, log_path: str | Path):
+    def __init__(
+        self, 
+        log_path: Optional[str | Path] = None, 
+        log_file: Optional[str | Path] = None,
+        create_dirs: bool = True,
+        **kwargs
+    ):
         """Initialize file audit adapter.
         
         Args:
             log_path: Directory for log files
+            log_file: Specific log file path (if provided, directory will be used as log_path)
+            create_dirs: Automatically create log directory
+            **kwargs: Additional configuration parameters
         """
         super().__init__()
-        self._log_path = Path(log_path)
+        
+        # Determine log path from either log_path or log_file
+        if log_path:
+            self._log_path = Path(log_path)
+        elif log_file:
+            self._log_path = Path(log_file).parent
+        else:
+            self._log_path = Path("./.isolated_agents/logs")
+            
+        self._create_dirs = create_dirs
         self._initialized = False
     
     async def initialize(self) -> None:

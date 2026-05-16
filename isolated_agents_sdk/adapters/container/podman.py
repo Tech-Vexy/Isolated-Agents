@@ -36,14 +36,25 @@ class PodmanAdapter(ContainerRuntimeAdapter):
     Wraps Podman CLI commands to provide container lifecycle management.
     """
     
-    def __init__(self, base_image: str = DEFAULT_IMAGE):
+    def __init__(
+        self, 
+        base_image: str = DEFAULT_IMAGE, 
+        socket_path: Optional[str] = None,
+        timeout: float = _PODMAN_TIMEOUT_SECONDS,
+        **kwargs
+    ):
         """Initialize Podman adapter.
         
         Args:
             base_image: Default container image to use
+            socket_path: Path to Podman socket (unused in CLI-based adapter)
+            timeout: Default timeout for container operations
+            **kwargs: Additional configuration parameters
         """
         super().__init__()
         self._base_image = base_image
+        self._socket_path = socket_path
+        self._timeout = timeout
         self._initialized = False
     
     async def initialize(self) -> None:
@@ -152,6 +163,7 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         env: Optional[dict[str, str]] = None,
         working_dir: Optional[str] = None,
         timeout: Optional[float] = None,
+        user: Optional[str] = None,
     ) -> ExecResult:
         """Execute a command in a running container.
         
@@ -160,12 +172,16 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             command: Command to execute
             working_dir: Working directory for command
             environment: Environment variables
+            user: User to run the command as (e.g. "root")
         
         Returns:
             ExecResult with exit code and output
         """
         cmd = ["podman", "exec"]
         
+        if user:
+            cmd.extend(["--user", user])
+            
         if working_dir:
             cmd.extend(["--workdir", working_dir])
         
@@ -176,7 +192,7 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         cmd.append(container_id)
         cmd.extend(command)
         
-        stdout, stderr, returncode = await self._run_podman(cmd, timeout=timeout or _PODMAN_TIMEOUT_SECONDS)
+        stdout, stderr, returncode = await self._run_podman(cmd, timeout=timeout or self._timeout)
         
         return ExecResult(
             exit_code=returncode,
@@ -277,7 +293,7 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             cmd.append("-f")
         cmd.append(container_id)
         
-        await self._run_podman(cmd, timeout=timeout or _PODMAN_TIMEOUT_SECONDS)
+        await self._run_podman(cmd, timeout=timeout or self._timeout)
     
     # ------------------------------------------------------------------
     # Internal helpers
@@ -327,21 +343,23 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         # Read-only rootfs
         if security_config.read_only_rootfs:
             cmd.append("--read-only")
-            cmd.extend(["--tmpfs", "/tmp:rw,noexec,nosuid,size=64m"])
-            cmd.extend(["--tmpfs", "/run:rw,noexec,nosuid,size=32m"])
-            cmd.extend(["--tmpfs", "/output:rw,noexec,nosuid,size=128m"])
+            cmd.extend(["--tmpfs", "/tmp:rw,nosuid,size=512m"])
+            cmd.extend(["--tmpfs", "/run:rw,noexec,nosuid,size=64m"])
+            cmd.extend(["--tmpfs", "/output:rw,noexec,nosuid,size=256m"])
         
         # Network
         if network_config.disabled:
             cmd.append("--network=none")
         else:
-            # Use the default 'podman' network name for rootless compatibility on Windows
-            cmd.append("--network=podman")
+            # Use 'bridge' network which is more standard across Podman installations
+            cmd.append("--network=bridge")
+            cmd.append("--dns=8.8.8.8")
             
             if network_config.allowed_endpoints:
-                for endpoint in network_config.allowed_endpoints:
-                    host = endpoint.split(":")[0]
-                    cmd.extend(["--add-host", f"{host}:{host}"])
+                # Note: Podman --add-host requires host:IP format.
+                # Since we use 8.8.8.8 DNS, we don't need to manually map public endpoints.
+                # True network whitelisting should be handled by a network policy provider.
+                pass
         
         # Resources
         cmd.append(f"--cpus={resource_limits.cpu_cores}")

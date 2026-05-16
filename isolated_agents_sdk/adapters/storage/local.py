@@ -50,14 +50,17 @@ class LocalStorageAdapter(StorageAdapter):
         /tmp/storage/session-123/output.txt
     """
     
-    def __init__(self, base_path: str | Path):
+    def __init__(self, base_path: str | Path, create_dirs: bool = True, **kwargs):
         """Initialize local storage adapter.
         
         Args:
             base_path: Base directory for storage
+            create_dirs: Automatically create directories if they don't exist
+            **kwargs: Additional configuration parameters
         """
         super().__init__()
         self._base_path = Path(base_path).absolute()
+        self._create_dirs = create_dirs
         self._initialized = False
     
     async def initialize(self) -> None:

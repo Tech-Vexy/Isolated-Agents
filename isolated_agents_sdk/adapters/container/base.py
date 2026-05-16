@@ -111,6 +111,7 @@ class ContainerRuntimeAdapter(BaseAdapter):
         env: Optional[dict[str, str]] = None,
         working_dir: Optional[str] = None,
         timeout: Optional[float] = None,
+        user: Optional[str] = None,
     ) -> ExecResult:
         """Execute a command inside a running container.
         
@@ -124,10 +125,11 @@ class ContainerRuntimeAdapter(BaseAdapter):
             env: Additional environment variables
             working_dir: Working directory for command
             timeout: Maximum seconds to wait for command completion
+            user: User to run the command as (e.g. "root")
             
         Returns:
             Execution result with exit code and output
-            
+        
         Raises:
             AdapterOperationError: If command execution fails
             TimeoutError: If command exceeds timeout

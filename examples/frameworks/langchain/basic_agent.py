@@ -1,67 +1,82 @@
-"""Basic LangChain agent with Isolated Agents SDK.
-
-This example demonstrates:
-- Simple LangChain integration
-- OpenAI API usage
-- Output artifact collection
-- Network policy configuration
-
-Usage:
-    export OPENAI_API_KEY=sk-...
-    python examples/frameworks/langchain/basic_agent.py
-"""
-
-import os
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
+from isolated_agents_sdk import run_agent, Policy, NetworkPolicy
 
+# Load environment variables from .env file
+load_dotenv()
 
 def langchain_agent():
-    """Simple LangChain agent that uses OpenAI."""
-    from langchain_openai import ChatOpenAI
-    from langchain.prompts import ChatPromptTemplate
-    from pathlib import Path
+    """Simple LangChain agent that uses Groq."""
+    import os as _os
+    import pathlib as _pathlib
+    from langchain_core.prompts import ChatPromptTemplate
     
-    # Create LLM
-    llm = ChatOpenAI(model="gpt-4", temperature=0.7)
+    _api_key = _os.environ.get("GROQ_API_KEY")
+    if _api_key:
+        from langchain_groq import ChatGroq
+        _llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.7)
+        _model_name = "llama-3.3-70b"
+    else:
+        from langchain_openai import ChatOpenAI
+        _llm = ChatOpenAI(model="gpt-4", temperature=0.7)
+        _model_name = "gpt-4"
     
     # Create prompt
-    prompt = ChatPromptTemplate.from_messages([
+    _prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a helpful AI assistant."),
         ("user", "{input}")
     ])
     
     # Create chain
-    chain = prompt | llm
+    _chain = _prompt | _llm
     
     # Run chain
-    result = chain.invoke({"input": "Explain quantum computing in simple terms"})
+    _result = _chain.invoke({"input": "Explain quantum computing in simple terms"})
     
     # Save output to /output directory (mapped to host)
-    output_dir = Path("/output")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    _out = _pathlib.Path("/output")
+    _out.mkdir(parents=True, exist_ok=True)
     
-    (output_dir / "response.txt").write_text(result.content)
-    (output_dir / "metadata.txt").write_text(
-        f"Model: gpt-4\nLength: {len(result.content)} characters\n"
+    (_out / "response.txt").write_text(_result.content)
+    (_out / "metadata.txt").write_text(
+        f"Model: {_model_name}\nLength: {len(_result.content)} characters\n"
     )
     
-    print(f"✓ Generated response ({len(result.content)} characters)")
+    print(f"[*] Generated response ({len(_result.content)} characters) using {_model_name}")
 
 
 if __name__ == "__main__":
-    from isolated_agents_sdk import run_agent, Policy, NetworkPolicy
+    import os
     
     # Check for API key
-    if not os.environ.get("OPENAI_API_KEY"):
-        print("Error: OPENAI_API_KEY environment variable not set", file=sys.stderr)
+    use_groq = bool(os.environ.get("GROQ_API_KEY"))
+    use_openai = bool(os.environ.get("OPENAI_API_KEY"))
+    
+    if not (use_groq or use_openai):
+        print("Error: Neither GROQ_API_KEY nor OPENAI_API_KEY set", file=sys.stderr)
         sys.exit(1)
+    
+    provider = "Groq" if use_groq else "OpenAI"
     
     # Create output directory
     host_output = Path("./output")
     host_output.mkdir(exist_ok=True)
     
-    print("Launching LangChain agent in isolated container...")
+    print(f"Launching LangChain agent using {provider} in isolated container...")
+    
+    # Prepare policy configuration
+    allowed_endpoints = [
+        "pypi.org:443", 
+        "files.pythonhosted.org:443"
+    ]
+    if use_groq:
+        allowed_endpoints.append("api.groq.com:443")
+    else:
+        allowed_endpoints.append("api.openai.com:443")
+        
+    allowed_env_vars = ["GROQ_API_KEY", "OPENAI_API_KEY"]
+    pip_packages = ["langchain==0.3.7", "langchain-groq"] if use_groq else ["langchain==0.3.7", "langchain-openai"]
     
     # Run agent in isolated container
     result = run_agent(
@@ -73,14 +88,14 @@ if __name__ == "__main__":
             memory_mb=1024,
             network=NetworkPolicy(
                 disabled=False,
-                allowed_endpoints=["api.openai.com:443"]
+                allowed_endpoints=allowed_endpoints
             ),
-            allowed_env_vars=["OPENAI_API_KEY"],
-            pip_packages=["langchain", "langchain-openai"],
+            allowed_env_vars=allowed_env_vars,
+            pip_packages=pip_packages,
         )
     )
     
-    print(f"\n✓ Agent completed with exit code {result.exit_code}")
+    print(f"\n[*] Agent completed with exit code {result.exit_code}")
     
     if result.artifacts:
         print(f"\nOutput artifacts:")
@@ -94,5 +109,3 @@ if __name__ == "__main__":
             print(f"\nResponse:\n{Path(response_path).read_text()}")
     
     sys.exit(result.exit_code)
-
-# Made with Bob

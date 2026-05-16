@@ -32,14 +32,38 @@ class DefaultPolicyValidator(PolicyValidator):
         ...         print(f"{error.field}: {error.message}")
     """
     
-    def __init__(self, constraints: Optional[PolicyConstraints] = None):
+    def __init__(
+        self, 
+        constraints: Optional[PolicyConstraints] = None,
+        strict_mode: bool = False,
+        max_cpu_cores: Optional[float] = None,
+        max_memory_mb: Optional[int] = None,
+        max_timeout_seconds: Optional[int] = None,
+        **kwargs
+    ):
         """Initialize default policy validator.
         
         Args:
-            constraints: Default validation constraints
+            constraints: Default validation constraints object
+            strict_mode: Whether to reject policies with warnings
+            max_cpu_cores: Maximum CPU cores allowed
+            max_memory_mb: Maximum memory in MB allowed
+            max_timeout_seconds: Maximum timeout in seconds allowed
+            **kwargs: Additional configuration parameters
         """
         super().__init__()
-        self._constraints = constraints or PolicyConstraints()
+        
+        if constraints:
+            self._constraints = constraints
+        else:
+            # Build constraints from individual parameters
+            self._constraints = PolicyConstraints(
+                max_cpu_cores=max_cpu_cores,
+                max_memory_mb=max_memory_mb,
+                max_timeout_seconds=max_timeout_seconds,
+            )
+            
+        self._strict_mode = strict_mode
         self._initialized = False
     
     async def initialize(self) -> None:
