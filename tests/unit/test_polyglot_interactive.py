@@ -99,8 +99,7 @@ def mock_podman():
     """Automatically mock podman for all tests in this file."""
     fake_exec = _make_fake_podman_exec()
     with patch("shutil.which", return_value="/usr/bin/podman"), \
-         patch("asyncio.create_subprocess_exec", side_effect=fake_exec), \
-         patch("isolated_agents_sdk.agent_runner.AgentRunner._monitor_privilege_escalation", new_callable=AsyncMock):
+         patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
         yield
 
 # ---------------------------------------------------------------------------

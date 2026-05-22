@@ -24,48 +24,71 @@ def validator() -> PolicyValidator:
 # ---------------------------------------------------------------------------
 
 class TestDefaultPolicy:
-    def test_returns_policy_instance(self, validator):
-        result = validator.validate(None)
+    @pytest.mark.asyncio
+    async def test_returns_policy_instance(self, validator):
+        result = await validator.validate(None)
         assert isinstance(result, Policy)
 
-    def test_default_cpu_cores(self, validator):
-        assert validator.validate(None).cpu_cores == 1.0
+    @pytest.mark.asyncio
+    async def test_default_cpu_cores(self, validator):
+        result = await validator.validate(None)
+        assert result.cpu_cores == 1.0
 
-    def test_default_memory_mb(self, validator):
-        assert validator.validate(None).memory_mb == 512
+    @pytest.mark.asyncio
+    async def test_default_memory_mb(self, validator):
+        result = await validator.validate(None)
+        assert result.memory_mb == 512
 
-    def test_default_network_disabled(self, validator):
-        assert validator.validate(None).network.disabled is True
+    @pytest.mark.asyncio
+    async def test_default_network_disabled(self, validator):
+        result = await validator.validate(None)
+        assert result.network.disabled is True
 
-    def test_default_network_no_endpoints(self, validator):
-        assert validator.validate(None).network.allowed_endpoints == []
+    @pytest.mark.asyncio
+    async def test_default_network_no_endpoints(self, validator):
+        result = await validator.validate(None)
+        assert result.network.allowed_endpoints == []
 
-    def test_default_readonly_mounts_empty(self, validator):
-        assert validator.validate(None).readonly_mounts == []
+    @pytest.mark.asyncio
+    async def test_default_readonly_mounts_empty(self, validator):
+        result = await validator.validate(None)
+        assert result.readonly_mounts == []
 
-    def test_default_allowed_env_vars_empty(self, validator):
-        assert validator.validate(None).allowed_env_vars == []
+    @pytest.mark.asyncio
+    async def test_default_allowed_env_vars_empty(self, validator):
+        result = await validator.validate(None)
+        assert result.allowed_env_vars == []
 
-    def test_default_output_path(self, validator):
-        assert validator.validate(None).output_path_in_container == "/output"
+    @pytest.mark.asyncio
+    async def test_default_output_path(self, validator):
+        result = await validator.validate(None)
+        assert result.output_path_in_container == "/output"
 
-    def test_default_max_output_bytes_none(self, validator):
-        assert validator.validate(None).max_output_bytes is None
+    @pytest.mark.asyncio
+    async def test_default_max_output_bytes_none(self, validator):
+        result = await validator.validate(None)
+        assert result.max_output_bytes is None
 
-    def test_default_timeout_seconds_none(self, validator):
-        assert validator.validate(None).timeout_seconds is None
+    @pytest.mark.asyncio
+    async def test_default_timeout_seconds_none(self, validator):
+        result = await validator.validate(None)
+        assert result.timeout_seconds is None
 
-    def test_default_log_output_path_none(self, validator):
-        assert validator.validate(None).log_output_path is None
+    @pytest.mark.asyncio
+    async def test_default_log_output_path_none(self, validator):
+        result = await validator.validate(None)
+        assert result.log_output_path is None
 
-    def test_valid_policy_returned_unchanged(self, validator):
+    @pytest.mark.asyncio
+    async def test_valid_policy_returned_unchanged(self, validator):
         policy = Policy(cpu_cores=2.0, memory_mb=1024)
-        result = validator.validate(policy)
+        result = await validator.validate(policy)
         assert result is policy
 
-    def test_non_policy_non_none_raises_type_error(self, validator):
+    @pytest.mark.asyncio
+    async def test_non_policy_non_none_raises_type_error(self, validator):
         with pytest.raises(TypeError):
-            validator.validate({"cpu_cores": 1.0})
+            await validator.validate({"cpu_cores": 1.0})
 
 
 # ---------------------------------------------------------------------------

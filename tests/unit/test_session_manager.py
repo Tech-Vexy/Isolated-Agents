@@ -12,7 +12,7 @@ import atexit
 import signal
 import threading
 import asyncio
-from unittest.mock import MagicMock, patch, call, AsyncMock
+from unittest.mock import MagicMock, patch, call, AsyncMock, ANY
 
 import pytest
 
@@ -233,7 +233,7 @@ class TestSessionRemovalAfterCompletion:
             _register(manager, session_id="s1", container_id="c1", agent_id="a1")
             await manager.complete_session("s1", exit_code=0)
 
-        mock_destroy.assert_called_once_with("c1", "s1", "a1")
+        mock_destroy.assert_called_once_with("c1", "s1", "a1", audit_logger=ANY)
 
     def test_destroy_all_clears_registry(self):
         manager = _make_manager()

@@ -135,7 +135,7 @@ class TestAuditEvent:
         emitted = []
 
         class CapturingLogger(AuditLogger):
-            def log_event(self, event_type, session_id, agent_id, payload):
+            async def log_event(self, event_type, session_id, agent_id, payload):
                 emitted.append((event_type, session_id, agent_id, payload))
 
         adapter = await _make_mock_adapter()

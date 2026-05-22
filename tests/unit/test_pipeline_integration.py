@@ -68,7 +68,7 @@ def _make_fake_podman_exec(container_id: str = "cid", exit_code_on_exec: int = 0
             if subcmd == "run":
                 stdout = (container_id + "\n").encode()
             elif subcmd == "exec":
-                if "test" in cmd:
+                if "test" in cmd or "pip" in cmd:
                     exit_code = 0
                 elif "find" in cmd:
                     stdout = b"/output/result.txt\n"
@@ -144,8 +144,9 @@ def _trivial_agent():
 @pytest.fixture(autouse=True)
 def mock_monitor():
     """Mock the privilege escalation monitor to avoid background hangs."""
-    with patch("isolated_agents_sdk.agent_runner.AgentRunner._monitor_privilege_escalation", new_callable=AsyncMock):
-        yield
+    # v0.2.1: _monitor_privilege_escalation was removed in favor of namespaces/seccomp.
+    # We yield directly here to avoid breaking existing test logic that depends on this fixure.
+    yield
 
 
 @pytest.fixture(autouse=True)

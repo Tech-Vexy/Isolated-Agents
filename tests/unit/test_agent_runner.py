@@ -14,15 +14,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import cloudpickle
 
-from isolated_agents_sdk.agent_runner import (
-    AgentRunner,
-    _CONTAINER_BOOTSTRAP_PATH,
-    _CONTAINER_OUTPUT_PATH,
-    _CONTAINER_SOURCE_PATH,
-)
+from isolated_agents_sdk.agent_runner import AgentRunner
 from isolated_agents_sdk.audit_logger import AuditLogger
-from isolated_agents_sdk.container_provisioner import ContainerHandle
-from isolated_agents_sdk.models import AgentResult, Policy
+from isolated_agents_sdk.adapters.container.types import ContainerHandle
+from isolated_agents_sdk.models import (
+    AgentResult,
+    Policy,
+    CONTAINER_BOOTSTRAP_PATH,
+    CONTAINER_OUTPUT_PATH,
+    CONTAINER_SOURCE_PATH,
+)
 from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
 from isolated_agents_sdk.adapters.container.types import ExecResult
 
@@ -38,7 +39,7 @@ class CapturingLogger(AuditLogger):
         super().__init__()
         self.events: list[dict] = []
 
-    def log_event(self, event_type, session_id, agent_id, payload):
+    async def log_event(self, event_type, session_id, agent_id, payload):
         self.events.append(
             {
                 "event_type": event_type,
@@ -95,7 +96,7 @@ class TestInjectSource:
         adapter.copy_to_container.assert_called_once()
         args = adapter.copy_to_container.call_args.args
         assert args[0] == "cid123"
-        assert args[2] == _CONTAINER_SOURCE_PATH
+        assert args[2] == CONTAINER_SOURCE_PATH
 
     async def test_temp_file_cleaned_up_after_copy(self):
         adapter = await _make_mock_adapter()
@@ -133,7 +134,7 @@ class TestInjectBootstrap:
             await runner._inject_bootstrap("cid123")
 
         script = "".join(captured_script)
-        assert repr(_CONTAINER_SOURCE_PATH) in script
+        assert repr(CONTAINER_SOURCE_PATH) in script
 
     async def test_adapter_copy_called_with_correct_destination(self):
         adapter = await _make_mock_adapter()
@@ -152,7 +153,7 @@ class TestInjectBootstrap:
         adapter.copy_to_container.assert_called_once()
         args = adapter.copy_to_container.call_args.args
         assert args[0] == "cid123"
-        assert args[2] == _CONTAINER_BOOTSTRAP_PATH
+        assert args[2] == CONTAINER_BOOTSTRAP_PATH
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +217,13 @@ class TestRunNormalCompletion:
 class TestRunNonZeroExitCode:
     async def test_exit_code_one_propagated(self):
         adapter = await _make_mock_adapter()
-        adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
+        
+        async def fake_exec(container_id, command, **kwargs):
+            if "pip" in command:
+                return ExecResult(exit_code=0, stdout="", stderr="")
+            return ExecResult(exit_code=1, stdout="", stderr="")
+            
+        adapter.exec_in_container.side_effect = fake_exec
         runner = _make_runner(adapter=adapter)
 
         with patch.object(runner, "_inject_source"):
@@ -227,7 +234,13 @@ class TestRunNonZeroExitCode:
 
     async def test_non_zero_exit_code_propagated(self):
         adapter = await _make_mock_adapter()
-        adapter.exec_in_container.return_value = ExecResult(exit_code=42, stdout="", stderr="")
+        
+        async def fake_exec(container_id, command, **kwargs):
+            if "pip" in command:
+                return ExecResult(exit_code=0, stdout="", stderr="")
+            return ExecResult(exit_code=42, stdout="", stderr="")
+            
+        adapter.exec_in_container.side_effect = fake_exec
         runner = _make_runner(adapter=adapter)
 
         with patch.object(runner, "_inject_source"):
@@ -239,7 +252,13 @@ class TestRunNonZeroExitCode:
     async def test_oom_kill_detection(self):
         logger = CapturingLogger()
         adapter = await _make_mock_adapter()
-        adapter.exec_in_container.return_value = ExecResult(exit_code=137, stdout="", stderr="")
+        
+        async def fake_exec(container_id, command, **kwargs):
+            if "pip" in command:
+                return ExecResult(exit_code=0, stdout="", stderr="")
+            return ExecResult(exit_code=137, stdout="", stderr="")
+            
+        adapter.exec_in_container.side_effect = fake_exec
         runner = _make_runner(logger=logger, adapter=adapter)
 
         with patch.object(runner, "_inject_source"):

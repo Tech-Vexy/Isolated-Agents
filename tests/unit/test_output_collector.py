@@ -16,7 +16,7 @@ import pytest
 
 from isolated_agents_sdk.audit_logger import AuditLogger
 from isolated_agents_sdk.exceptions import OutputSizeLimitError
-from isolated_agents_sdk.models import AgentResult
+from isolated_agents_sdk.models import AgentResult, Policy
 from isolated_agents_sdk.output_collector import OutputCollector
 
 # ---------------------------------------------------------------------------
@@ -39,6 +39,7 @@ async def _make_mock_storage_adapter():
     adapter = MagicMock(spec=StorageAdapter)
     adapter.initialize = AsyncMock()
     adapter.store_artifact = AsyncMock(return_value=StorageLocation(session_id="s", artifact_name="a", path="/fake/path"))
+    adapter.get_adapter_name = MagicMock(return_value="MockStorageAdapter")
     return adapter
 
 CONTAINER_ID = "abc123"
@@ -69,12 +70,12 @@ class TestMissingOutputPath:
         adapter = await _make_mock_container_adapter()
         adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
         collector = _make_collector(container_adapter=adapter)
+        policy = Policy(output_path_in_container=OUTPUT_PATH)
 
         result = await collector.collect(
             container_id=CONTAINER_ID,
-            output_path_in_container=OUTPUT_PATH,
+            policy=policy,
             host_output_path=tmp_path / "out",
-            max_output_bytes=None,
             exit_code=0,
             session_id=SESSION_ID,
             agent_id=AGENT_ID,
@@ -87,12 +88,12 @@ class TestMissingOutputPath:
         adapter = await _make_mock_container_adapter()
         adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
         collector = _make_collector(container_adapter=adapter)
+        policy = Policy(output_path_in_container=OUTPUT_PATH)
 
         result = await collector.collect(
             container_id=CONTAINER_ID,
-            output_path_in_container=OUTPUT_PATH,
+            policy=policy,
             host_output_path=tmp_path / "out",
-            max_output_bytes=None,
             exit_code=0,
             session_id=SESSION_ID,
             agent_id=AGENT_ID,
@@ -105,12 +106,12 @@ class TestMissingOutputPath:
         adapter = await _make_mock_container_adapter()
         adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
         collector = _make_collector(container_adapter=adapter)
+        policy = Policy(output_path_in_container=OUTPUT_PATH)
 
         result = await collector.collect(
             container_id=CONTAINER_ID,
-            output_path_in_container=OUTPUT_PATH,
+            policy=policy,
             host_output_path=tmp_path / "out",
-            max_output_bytes=None,
             exit_code=42,
             session_id=SESSION_ID,
             agent_id=AGENT_ID,
@@ -123,12 +124,12 @@ class TestMissingOutputPath:
         adapter = await _make_mock_container_adapter()
         adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
         collector = _make_collector(container_adapter=adapter)
+        policy = Policy(output_path_in_container=OUTPUT_PATH)
 
         result = await collector.collect(
             container_id=CONTAINER_ID,
-            output_path_in_container=OUTPUT_PATH,
+            policy=policy,
             host_output_path=tmp_path / "out",
-            max_output_bytes=None,
             exit_code=0,
             session_id=SESSION_ID,
             agent_id=AGENT_ID,
@@ -142,13 +143,13 @@ class TestMissingOutputPath:
         adapter = await _make_mock_container_adapter()
         adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
         collector = _make_collector(container_adapter=adapter)
+        policy = Policy(output_path_in_container=OUTPUT_PATH)
 
         with caplog.at_level(logging.WARNING, logger="isolated_agents_sdk.output_collector"):
             await collector.collect(
                 container_id=CONTAINER_ID,
-                output_path_in_container=OUTPUT_PATH,
+                policy=policy,
                 host_output_path=tmp_path / "out",
-                max_output_bytes=None,
                 exit_code=0,
                 session_id=SESSION_ID,
                 agent_id=AGENT_ID,
@@ -161,12 +162,12 @@ class TestMissingOutputPath:
         adapter = await _make_mock_container_adapter()
         adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
         collector = _make_collector(container_adapter=adapter)
+        policy = Policy(output_path_in_container=OUTPUT_PATH)
 
         await collector.collect(
             container_id=CONTAINER_ID,
-            output_path_in_container=OUTPUT_PATH,
+            policy=policy,
             host_output_path=tmp_path / "out",
-            max_output_bytes=None,
             exit_code=0,
             session_id=SESSION_ID,
             agent_id=AGENT_ID,
@@ -220,12 +221,12 @@ class TestOutputSizeLimit:
         container_adapter.copy_from_container.side_effect = fake_cp
 
         collector = _make_collector(container_adapter=container_adapter, audit_logger=audit_logger)
+        policy = Policy(output_path_in_container=OUTPUT_PATH, max_output_bytes=max_output_bytes)
 
         await collector.collect(
             container_id=CONTAINER_ID,
-            output_path_in_container=OUTPUT_PATH,
+            policy=policy,
             host_output_path=tmp_path / "host_out",
-            max_output_bytes=max_output_bytes,
             exit_code=0,
             session_id=SESSION_ID,
             agent_id=AGENT_ID,
