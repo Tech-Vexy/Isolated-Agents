@@ -246,17 +246,17 @@ pip install isolated-agents-sdk
    python my_agent.py
    ```
 
-See the [Quick Start Guide](quick-start.md) for more details.
+See the [Getting Started Guide](getting-started.md) for more details.
 
 ---
 
 ## Documentation
 
 - **[Getting Started](getting-started.md)** - Installation and first steps
-- **[Core Concepts](PRODUCTION_READY_SUMMARY.md)** - Understanding the SDK
+- **[Adapter Architecture](ADAPTER_ARCHITECTURE.md)** - Understanding the SDK
 - **[Architecture](ADAPTER_ARCHITECTURE.md)** - System design
 - **[Examples](EXAMPLES_CATALOG.md)** - 81+ working examples
-- **[Implementation](QUICKSTART_ADAPTERS.md)** - Implementation guides
+- **[Extending Adapters](EXTENDING_ADAPTERS.md)** - Implementation guides
 
 ---
 

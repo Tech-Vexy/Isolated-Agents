@@ -779,4 +779,4 @@ All examples are:
 For more examples, see:
 - `examples/` directory in the repository
 - [Examples Catalog](./EXAMPLES_CATALOG.md)
-- [Documentation](../docs/README.md)
+- [Documentation](../docs/index.md)

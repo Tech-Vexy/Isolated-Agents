@@ -758,5 +758,5 @@ The Isolated Agents SDK provides comprehensive support for:
 
 For more information, see:
 - [Architecture](ADAPTER_ARCHITECTURE.md)
-- [Production Ready Summary](PRODUCTION_READY_SUMMARY.md)
+- [Adapter Architecture](ADAPTER_ARCHITECTURE.md)
 - [Examples Catalog](EXAMPLES_CATALOG.md)

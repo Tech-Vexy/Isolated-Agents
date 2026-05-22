@@ -38,6 +38,24 @@ examples/
     └── testing/                # Testing examples
 ```
 
+## 🚀 v0.2.0 Featured Examples
+
+The latest version of the SDK introduces advanced orchestration features.
+
+### Advanced Scenarios
+- **[Streamed Outputs](./streamed_output_example.py)**: Real-time stdout capture from isolated agents using callbacks.
+- **[Observability & Metrics](./observability_metrics.py)**: Exporting real-time telemetry from the `AgentRuntime` status API.
+- **[Durable Execution](./durable_execution.py)**: Multi-step agents with state persistence and checkpointing APIs.
+- **[Graph Orchestration](./graph_agents_orchestration.py)**: Multi-agent state machine with nodes, edges, and conditional routing.
+- **[Server Agent](./server_agent_example.py)**: Running a persistent HTTP server inside an isolated container using Ingress port mapping.
+- **[Scheduled Agents](./scheduled_agent_example.py)**: Using the `AgentScheduler` for recurring intervals and delayed background tasks.
+- **[Runtime Recursion](./runtime_recursion_example.py)**: Spawning sub-agents from within a container via the Host IPC Spawn Daemon.
+- **[Production JSON Logging](./production_json_logging.py)**: Configuring the high-performance structured logging system for log aggregators.
+
+### Multi-Agent Patterns
+- **[Hierarchical Multi-Agent](./multi_agent_hierarchy.py)**: A "Manager" agent spawning specialized "Researcher" and "Writer" workers in sub-sandboxes using recursion.
+- **[Collaborative Multi-Agent Mesh](./multi_agent_mesh.py)**: Independent agents running as network-reachable nodes that exchange data via HTTP/Ingress.
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -226,7 +244,7 @@ export AZURE_STORAGE_CONNECTION_STRING=...
 ## 📖 Documentation
 
 For detailed documentation, see:
-- [Production Ready Summary](../docs/PRODUCTION_READY_SUMMARY.md)
+- [Adapter Architecture](../docs/ADAPTER_ARCHITECTURE.md)
 - [Adapter Architecture](../docs/ADAPTER_ARCHITECTURE.md)
 - [Decorators Guide](../docs/DECORATORS.md)
 - [Composability Guide](../docs/COMPOSABILITY.md)
@@ -321,7 +339,7 @@ if __name__ == "__main__":
 
 **Container runtime not found:**
 - Install Podman or Docker
-- See [Automatic Installation Guide](../docs/AUTOMATIC_INSTALLATION.md)
+- See [Getting Started](../docs/getting-started.md)
 
 **Network access denied:**
 - Ensure `NetworkPolicy(disabled=False)` is set

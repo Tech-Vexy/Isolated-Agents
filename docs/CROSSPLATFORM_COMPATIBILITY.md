@@ -733,5 +733,4 @@ platform_info = PlatformInfo()
 
 **Next Steps:**
 - Review [ADAPTER_ARCHITECTURE.md](ADAPTER_ARCHITECTURE.md) for runtime abstraction
-- See [REFACTORING_GUIDE.md](REFACTORING_GUIDE.md) for implementation
-- Check [IMPLEMENTATION_GAP_ANALYSIS.md](IMPLEMENTATION_GAP_ANALYSIS.md) for status
+- See [EXTENDING_ADAPTERS.md](EXTENDING_ADAPTERS.md) for implementation

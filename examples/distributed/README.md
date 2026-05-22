@@ -279,7 +279,7 @@ pip install redis pika
 
 - [Redis Documentation](https://redis.io/docs/)
 - [RabbitMQ Tutorials](https://www.rabbitmq.com/getstarted.html)
-- [Isolated Agents SDK Documentation](../../docs/README.md)
+- [Isolated Agents SDK Documentation](../../docs/index.md)
 - [Agent Communication Guide](../../docs/AGENT_COMMUNICATION.md)
 
 ## Next Steps

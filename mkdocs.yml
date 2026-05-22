@@ -120,40 +120,27 @@ nav:
   - Home:
     - index.md
     - Getting Started: getting-started.md
-    - Quick Start: quick-start.md
-  
+
   - Architecture:
-    - Overview: PRODUCTION_READY_SUMMARY.md
     - Adapter Pattern: ADAPTER_ARCHITECTURE.md
-    - Adapter Summary: ADAPTER_PATTERN_SUMMARY.md
-    - Architecture Diagrams: ARCHITECTURE_DIAGRAM.md
-    - Implementation Plan: IMPLEMENTATION_PLAN.md
-    - Complete Guide: COMPLETE_IMPLEMENTATION_GUIDE.md
-  
+    - Agent Runtime: AGENT_RUNTIME.md
+
   - Features:
     - Decorators: DECORATORS.md
     - Composability: COMPOSABILITY.md
     - Multimodal Outputs: MULTIMODAL_OUTPUTS.md
     - Validation: EXPECT_SEQUENCES.md
-    - Telemetry: TELEMETRY_LOGGING.md
+    - Telemetry & Logging: TELEMETRY_LOGGING.md
     - Framework Compatibility: FRAMEWORK_COMPATIBILITY.md
     - Long-Running Agents: LONG_RUNNING_AGENTS.md
     - Agent Communication: AGENT_COMMUNICATION.md
-  
-  - Implementation:
-    - Quickstart: QUICKSTART_ADAPTERS.md
-    - API Adapter Support: API_ADAPTER_SUPPORT.md
-    - Migration Guide: MIGRATION_GUIDE.md
-    - Extension Guide: EXTENDING_ADAPTERS.md
-    - Refactoring Guide: REFACTORING_GUIDE.md
-    - Gap Analysis: IMPLEMENTATION_GAP_ANALYSIS.md
+
+  - Guides:
+    - Migration: MIGRATION_GUIDE.md
+    - Extending Adapters: EXTENDING_ADAPTERS.md
     - Cross-Platform: CROSSPLATFORM_COMPATIBILITY.md
-    - Auto Installation: AUTOMATIC_INSTALLATION.md
-  
+
   - Examples:
     - Overview: EXAMPLES_CATALOG.md
-  
-  - Deployment:
-    - Website Deployment: WEBSITE_DEPLOYMENT.md
 
 # Made with Bob

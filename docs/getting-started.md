@@ -89,15 +89,23 @@ if not installer.is_runtime_available():
     # Then install Podman in WSL2 using Linux instructions
     ```
 
-See [Automatic Installation Guide](AUTOMATIC_INSTALLATION.md) for more details.
 
 ---
 
 ## Your First Agent
 
-### Step 1: Create a Simple Agent
+### Core Features (v0.2.0)
 
-Create a file called `hello_agent.py`:
+Before running your first agent, take note of the new production-ready features:
+
+- **Unified Runtime**: Orchestrate multiple agents and sessions via the `AgentRuntime`.
+- **Background Scheduling**: Run tasks on intervals or with delays using the `AgentScheduler`.
+- **Structured Logging**: Enable machine-readable JSON logs for production observability.
+- **Agent Recursion**: Allow agents to spawn their own isolated sub-agents securely.
+
+---
+
+## Your First Agent
 
 ```python
 from isolated_agents_sdk import run_agent, Policy
@@ -265,7 +273,7 @@ print(result.artifacts)      # Dict of output files
 ### Learn Core Concepts
 
 - [Architecture](ADAPTER_ARCHITECTURE.md) - Understand the system design
-- [Implementation](QUICKSTART_ADAPTERS.md) - How to implement adapters
+- [Extending Adapters](EXTENDING_ADAPTERS.md) - How to implement adapters
 - [Platform Support](CROSSPLATFORM_COMPATIBILITY.md) - OS compatibility
 
 ### Explore Features
@@ -277,13 +285,12 @@ print(result.artifacts)      # Dict of output files
 ### Try Examples
 
 - [Examples Catalog](EXAMPLES_CATALOG.md) - 81+ examples
-- [Adapter Implementation](COMPLETE_IMPLEMENTATION_GUIDE.md) - Comprehensive guide
+- [Adapter Architecture](ADAPTER_ARCHITECTURE.md) - Comprehensive guide
 
 ### Read Guides
 
-- [Best Practices](QUICKSTART_ADAPTERS.md) - Production patterns
+- [Extending Adapters](EXTENDING_ADAPTERS.md) - Production patterns
 - [Security](ADAPTER_ARCHITECTURE.md) - Security guidelines
-- [Testing](IMPLEMENTATION_PLAN.md) - Testing strategies
 
 ---
 
@@ -390,7 +397,7 @@ Error: Permission denied
 
 **Solution:** Check file permissions or use rootless Podman.
 
-See [Production Ready Summary](PRODUCTION_READY_SUMMARY.md) for more.
+See [Adapter Architecture](ADAPTER_ARCHITECTURE.md) for more.
 
 ---
 
@@ -407,9 +414,9 @@ See [Production Ready Summary](PRODUCTION_READY_SUMMARY.md) for more.
 
 Now that you have the basics, explore:
 
-1. **[Quick Start](quick-start.md)** - More detailed tutorial
+1. **[Adapter Architecture](ADAPTER_ARCHITECTURE.md)** - Architecture deep-dive
 2. **[Architecture](ADAPTER_ARCHITECTURE.md)** - Deep dive into architecture
 3. **[Examples](EXAMPLES_CATALOG.md)** - Learn from examples
-4. **[Implementation](COMPLETE_IMPLEMENTATION_GUIDE.md)** - Complete guide
+4. **[Extending Adapters](EXTENDING_ADAPTERS.md)** - Complete guide
 
 Happy coding! 🚀
