@@ -1,3 +1,59 @@
+# Secrets / env
 .env
-output
-.venv
+.env.*
+!.env.example
+
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+*.pyo
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+*.egg
+
+# Virtualenvs (anywhere in the tree — examples/.local, workspace/.local, etc.)
+.venv/
+venv/
+env/
+**/.local/
+**/.cache/
+pyvenv.cfg
+
+# Build / packaging artifacts
+build/
+dist/
+site/
+*.whl
+*.tar.gz
+
+# Mkdocs build output (in addition to /site)
+/site/
+
+# Project-specific scratch / runtime dirs
+output/
+workspace/
+tmp_workspace/
+test_runtime/
+server_agent_workspace/
+bob_sessions/
+.isolated_agents/
+
+# Ad-hoc build / lint / scratch files
+build_output.txt
+final_build_output.txt
+pylint_report.txt
+scratch_*.py
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
