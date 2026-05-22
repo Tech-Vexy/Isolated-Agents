@@ -112,6 +112,8 @@ class ContainerRuntimeAdapter(BaseAdapter):
         working_dir: Optional[str] = None,
         timeout: Optional[float] = None,
         user: Optional[str] = None,
+        on_stdout: Optional[Callable[[str], None]] = None,
+        on_stderr: Optional[Callable[[str], None]] = None,
     ) -> ExecResult:
         """Execute a command inside a running container.
         
@@ -126,6 +128,8 @@ class ContainerRuntimeAdapter(BaseAdapter):
             working_dir: Working directory for command
             timeout: Maximum seconds to wait for command completion
             user: User to run the command as (e.g. "root")
+            on_stdout: Callback for real-time stdout (received as string chunks)
+            on_stderr: Callback for real-time stderr (received as string chunks)
             
         Returns:
             Execution result with exit code and output
@@ -133,6 +137,36 @@ class ContainerRuntimeAdapter(BaseAdapter):
         Raises:
             AdapterOperationError: If command execution fails
             TimeoutError: If command exceeds timeout
+        """
+        pass
+
+    @abstractmethod
+    async def interactive_exec(
+        self,
+        container_id: str,
+        command: list[str],
+        env: Optional[dict[str, str]] = None,
+        working_dir: Optional[str] = None,
+        user: Optional[str] = None,
+    ) -> int:
+        """Execute an interactive command inside a running container.
+        
+        This method attaches the host's standard input, output, and error
+        streams to the command running inside the container. It is typically
+        used for shell-based agents that require user input.
+        
+        Args:
+            container_id: Container identifier
+            command: Command to execute (e.g., ["/bin/bash"])
+            env: Additional environment variables
+            working_dir: Working directory for command
+            user: User to run the command as (e.g. "root")
+            
+        Returns:
+            Exit code of the command
+            
+        Raises:
+            AdapterOperationError: If command execution fails
         """
         pass
     
@@ -224,6 +258,16 @@ class ContainerRuntimeAdapter(BaseAdapter):
         """
         pass
     
+    @abstractmethod
+    def destroy_container_sync(
+        self,
+        container_id: str,
+        force: bool = True,
+    ) -> None:
+        """Stop and remove a container synchronously (emergency/atexit fallback).
+        """
+        pass
+
     async def list_containers(
         self,
         all: bool = False,
@@ -232,7 +276,7 @@ class ContainerRuntimeAdapter(BaseAdapter):
         
         This is an optional method that may be implemented by adapters to
         support container discovery and management.
-        
+
         Args:
             all: If True, include stopped containers
             

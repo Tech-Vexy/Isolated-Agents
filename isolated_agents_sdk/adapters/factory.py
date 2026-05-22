@@ -7,13 +7,22 @@ from typing import Optional, Type
 from isolated_agents_sdk.adapters.base import BaseAdapter
 from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
 from isolated_agents_sdk.adapters.container.podman import PodmanAdapter
+from isolated_agents_sdk.adapters.container.docker import DockerAdapter
+from isolated_agents_sdk.adapters.container.kubernetes import KubernetesAdapter
 from isolated_agents_sdk.adapters.audit.base import AuditAdapter
 from isolated_agents_sdk.adapters.audit.file import FileAuditAdapter
+from isolated_agents_sdk.adapters.audit.telemetry import TelemetryAuditAdapter
+from isolated_agents_sdk.adapters.audit.composite import CompositeAuditAdapter
+from isolated_agents_sdk.adapters.audit.stderr import StderrAuditAdapter
 from isolated_agents_sdk.adapters.exceptions import AdapterNotFoundError
 from isolated_agents_sdk.adapters.policy.base import PolicyValidator
 from isolated_agents_sdk.adapters.policy.default import DefaultPolicyValidator
 from isolated_agents_sdk.adapters.storage.base import StorageAdapter
 from isolated_agents_sdk.adapters.storage.local import LocalStorageAdapter
+from isolated_agents_sdk.adapters.database.base import DatabaseAdapter
+from isolated_agents_sdk.adapters.database.sql import SQLDatabaseAdapter
+from isolated_agents_sdk.adapters.database.nosql import NoSQLDatabaseAdapter
+from isolated_agents_sdk.adapters.database.vector import VectorDatabaseAdapter
 
 
 class AdapterFactory:
@@ -40,6 +49,8 @@ class AdapterFactory:
     
     _container_adapters: dict[str, Type[ContainerRuntimeAdapter]] = {
         "podman": PodmanAdapter,
+        "docker": DockerAdapter,
+        "kubernetes": KubernetesAdapter,
     }
     
     _storage_adapters: dict[str, Type[StorageAdapter]] = {
@@ -48,10 +59,19 @@ class AdapterFactory:
     
     _audit_adapters: dict[str, Type[AuditAdapter]] = {
         "file": FileAuditAdapter,
+        "telemetry": TelemetryAuditAdapter,
+        "composite": CompositeAuditAdapter,
+        "stderr": StderrAuditAdapter,
     }
     
     _policy_adapters: dict[str, Type[PolicyValidator]] = {
         "default": DefaultPolicyValidator,
+    }
+    
+    _database_adapters: dict[str, Type[DatabaseAdapter]] = {
+        "sql": SQLDatabaseAdapter,
+        "nosql": NoSQLDatabaseAdapter,
+        "vector": VectorDatabaseAdapter,
     }
     
     @classmethod
@@ -218,7 +238,7 @@ class AdapterFactory:
         """Create an audit logger adapter.
         
         Args:
-            adapter_type: Type of adapter ("file", "database", "cloudwatch")
+            adapter_type: Type of adapter ("file", "telemetry", "composite")
             **kwargs: Additional arguments for adapter initialization
         
         Returns:
@@ -360,5 +380,51 @@ class AdapterFactory:
             Default adapter type name
         """
         return "default"
+
+    @classmethod
+    def create_database_adapter(
+        cls,
+        adapter_type: str = "sql",
+        **kwargs,
+    ) -> DatabaseAdapter:
+        """Create a database adapter.
+        
+        Args:
+            adapter_type: Type of adapter ("sql", "nosql", "vector")
+            **kwargs: Additional arguments for adapter initialization
+        
+        Returns:
+            DatabaseAdapter instance
+        
+        Raises:
+            AdapterNotFoundError: If adapter type is not registered
+        """
+        adapter_class = cls._database_adapters.get(adapter_type)
+        if adapter_class is None:
+            raise AdapterNotFoundError(
+                f"Database adapter '{adapter_type}' not found. "
+                f"Available adapters: {list(cls._database_adapters.keys())}"
+            )
+        
+        return adapter_class(**kwargs)
+
+    @classmethod
+    def register_database_adapter(
+        cls,
+        name: str,
+        adapter_class: Type[DatabaseAdapter],
+    ) -> None:
+        """Register a custom database adapter."""
+        cls._database_adapters[name] = adapter_class
+
+    @classmethod
+    def list_database_adapters(cls) -> list[str]:
+        """List available database adapters."""
+        return list(cls._database_adapters.keys())
+
+    @classmethod
+    def get_default_database_adapter(cls) -> str:
+        """Get the default database adapter type."""
+        return "sql"
 
 # Made with Bob

@@ -57,13 +57,15 @@ class Mount:
     """Container mount specification.
     
     Attributes:
-        source: Host path to mount
+        source: Host path to mount (or 'tmpfs' for internal ephemeral storage)
         target: Container path where source is mounted
         readonly: If True, mount is read-only
+        size_mb: For tmpfs mounts, the size limit in MiB.
     """
     source: str
     target: str
     readonly: bool = False
+    size_mb: Optional[int] = None
 
 
 @dataclass
@@ -87,9 +89,15 @@ class NetworkConfig:
     Attributes:
         disabled: If True, container has no network access
         allowed_endpoints: List of allowed endpoints in "host:port" or CIDR format
+        websockets: Enable WebSocket protocol support
+        grpc: Enable gRPC protocol support
+        ingress_ports: List of ports to expose on the container for incoming connections
     """
     disabled: bool = True
     allowed_endpoints: list[str] = field(default_factory=list)
+    websockets: bool = False
+    grpc: bool = False
+    ingress_ports: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -103,6 +111,7 @@ class SecurityConfig:
         no_new_privileges: If True, prevent privilege escalation
         seccomp_profile: Path to seccomp profile or "unconfined" to disable
         user: UID:GID string for container user (None = derive from host)
+        tmpfs_size_mb: Default size for automatically created tmpfs mounts (/tmp)
     """
     cap_drop: list[str] = field(default_factory=lambda: ["ALL"])
     cap_add: list[str] = field(default_factory=list)
@@ -110,5 +119,6 @@ class SecurityConfig:
     no_new_privileges: bool = True
     seccomp_profile: Optional[str] = None
     user: Optional[str] = None
+    tmpfs_size_mb: int = 512
 
 # Made with Bob

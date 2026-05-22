@@ -39,6 +39,7 @@ from isolated_agents_sdk.adapters.exceptions import (
 from isolated_agents_sdk.adapters.factory import AdapterFactory
 from isolated_agents_sdk.adapters.policy.base import PolicyValidator
 from isolated_agents_sdk.adapters.storage.base import StorageAdapter
+from isolated_agents_sdk.adapters.database.base import DatabaseAdapter
 
 
 class AdapterRegistry:
@@ -73,11 +74,13 @@ class AdapterRegistry:
         self._storage_adapters: Dict[str, StorageAdapter] = {}
         self._audit_adapters: Dict[str, AuditAdapter] = {}
         self._policy_adapters: Dict[str, PolicyValidator] = {}
+        self._database_adapters: Dict[str, DatabaseAdapter] = {}
         
         self._default_container: Optional[str] = None
         self._default_storage: Optional[str] = None
         self._default_audit: Optional[str] = None
         self._default_policy: Optional[str] = None
+        self._default_database: Optional[str] = None
         
         self._initialized = False
         self._lock = threading.RLock()
@@ -167,6 +170,21 @@ class AdapterRegistry:
             if self._default_policy is None:
                 self._default_policy = config.policy_adapter
             
+            # Create and register database adapters
+            for db_name, db_info in config.database_adapters.items():
+                if db_name not in self._database_adapters:
+                    db_type = db_info.get("type", "sql")
+                    # Remove 'type' from config before passing to factory
+                    db_config = {k: v for k, v in db_info.items() if k != "type"}
+                    database = AdapterFactory.create_database_adapter(
+                        db_type,
+                        **db_config
+                    )
+                    self.register_database_adapter(db_name, database)
+            
+            if self._default_database is None:
+                self._default_database = config.default_database
+
             self._initialized = True
     
     # Container adapter methods
@@ -469,6 +487,64 @@ class AdapterRegistry:
                 )
             self._default_policy = name
     
+    # Database adapter methods
+    
+    def register_database_adapter(
+        self,
+        name: str,
+        adapter: DatabaseAdapter
+    ) -> None:
+        """Register a database adapter.
+        
+        Args:
+            name: Name to register the adapter under
+            adapter: Database adapter instance
+        """
+        with self._lock:
+            self._database_adapters[name] = adapter
+            if self._default_database is None:
+                self._default_database = name
+    
+    def get_database_adapter(self, name: Optional[str] = None) -> DatabaseAdapter:
+        """Get a database adapter by name.
+        
+        Args:
+            name: Name of the adapter to get. If None, returns the default adapter.
+            
+        Returns:
+            Database adapter instance
+            
+        Raises:
+            AdapterNotFoundError: If the adapter is not found
+        """
+        if not self._initialized and name is None:
+            self.initialize_from_config(AdapterConfig())
+
+        with self._lock:
+            if name is None:
+                name = self._default_database
+            
+            if name is None:
+                raise AdapterConfigurationError(
+                    "No default database adapter configured"
+                )
+            
+            if name not in self._database_adapters:
+                raise AdapterNotFoundError(
+                    f"Database adapter not found: {name}"
+                )
+            
+            return self._database_adapters[name]
+
+    def set_default_database_adapter(self, name: str) -> None:
+        """Set the default database adapter."""
+        with self._lock:
+            if name not in self._database_adapters:
+                raise AdapterNotFoundError(
+                    f"Database adapter not found: {name}"
+                )
+            self._default_database = name
+
     # Utility methods
     
     def list_adapters(self) -> Dict[str, list[str]]:
@@ -493,6 +569,7 @@ class AdapterRegistry:
                 "storage": list(self._storage_adapters.keys()),
                 "audit": list(self._audit_adapters.keys()),
                 "policy": list(self._policy_adapters.keys()),
+                "database": list(self._database_adapters.keys()),
             }
     
     def clear(self) -> None:
@@ -506,10 +583,12 @@ class AdapterRegistry:
             self._storage_adapters.clear()
             self._audit_adapters.clear()
             self._policy_adapters.clear()
+            self._database_adapters.clear()
             self._default_container = None
             self._default_storage = None
             self._default_audit = None
             self._default_policy = None
+            self._default_database = None
             self._initialized = False
 
 

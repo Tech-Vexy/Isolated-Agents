@@ -55,6 +55,8 @@ class AuditAdapter(BaseAdapter):
         user_id: Optional[str] = None,
         severity: str = "info",
         tags: Optional[dict[str, str]] = None,
+        timestamp: Optional[str] = None,
+        raw_event_type: Optional[str] = None,
     ) -> str:
         """Log an audit event.
         
@@ -66,6 +68,8 @@ class AuditAdapter(BaseAdapter):
             user_id: Optional user identifier
             severity: Event severity (info, warning, error, critical)
             tags: Optional key-value tags
+            timestamp: Optional ISO 8601 timestamp (uses current time if None)
+            raw_event_type: Optional original event type string
         
         Returns:
             Event ID

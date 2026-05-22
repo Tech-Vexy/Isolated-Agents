@@ -78,6 +78,11 @@ class AdapterConfig:
     # Policy adapter configuration
     policy_adapter: str = "default"
     policy_config: Dict[str, Any] = field(default_factory=dict)
+
+    # Database adapter configuration (mapping of name -> {type, config})
+    # e.g. {"main_db": {"type": "sql", "url": "sqlite:///:memory:"}}
+    database_adapters: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    default_database: Optional[str] = None
     
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> "AdapterConfig":
@@ -96,15 +101,21 @@ class AdapterConfig:
             ...     "storage_config": {"base_path": "/data"}
             ... })
         """
+        # We use a temporary instance to get default values for fields
+        # that are not provided in the config_dict.
+        defaults = cls()
+        
         return cls(
-            container_adapter=config_dict.get("container_adapter", "podman"),
-            container_config=config_dict.get("container_config", {}),
-            storage_adapter=config_dict.get("storage_adapter", "local"),
-            storage_config=config_dict.get("storage_config", {}),
-            audit_adapter=config_dict.get("audit_adapter", "file"),
-            audit_config=config_dict.get("audit_config", {}),
-            policy_adapter=config_dict.get("policy_adapter", "default"),
-            policy_config=config_dict.get("policy_config", {}),
+            container_adapter=config_dict.get("container_adapter", defaults.container_adapter),
+            container_config=config_dict.get("container_config", defaults.container_config),
+            storage_adapter=config_dict.get("storage_adapter", defaults.storage_adapter),
+            storage_config=config_dict.get("storage_config", defaults.storage_config),
+            audit_adapter=config_dict.get("audit_adapter", defaults.audit_adapter),
+            audit_config=config_dict.get("audit_config", defaults.audit_config),
+            policy_adapter=config_dict.get("policy_adapter", defaults.policy_adapter),
+            policy_config=config_dict.get("policy_config", defaults.policy_config),
+            database_adapters=config_dict.get("database_adapters", defaults.database_adapters),
+            default_database=config_dict.get("default_database", defaults.default_database),
         )
     
     @classmethod

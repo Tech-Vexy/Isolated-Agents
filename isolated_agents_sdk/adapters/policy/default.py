@@ -195,6 +195,57 @@ class DefaultPolicyValidator(PolicyValidator):
                         suggestion="Set read_only_rootfs=True"
                     )
         
+        # Validate ingress ports
+        if hasattr(policy, 'network') and policy.network:
+            ingress_ports = getattr(policy.network, 'ingress_ports', [])
+            if ingress_ports and constraints.allowed_ingress_ports is not None:
+                for port in ingress_ports:
+                    if port not in constraints.allowed_ingress_ports:
+                        result.add_error(
+                            "network.ingress_ports",
+                            f"Port {port} is not in allowed list",
+                            code="PORT_NOT_ALLOWED",
+                            suggestion=f"Only use ports from: {constraints.allowed_ingress_ports}"
+                        )
+        
+        # Validate Environment Variables (Protection)
+        current_env_vars = getattr(policy, 'env_vars', {})
+        current_allowed_env_vars = getattr(policy, 'allowed_env_vars', [])
+        
+        # Check against policy-level blocks
+        if hasattr(policy, 'blocked_env_vars') and policy.blocked_env_vars:
+            for blocked in policy.blocked_env_vars:
+                if blocked in current_env_vars:
+                     result.add_error(
+                        "env_vars",
+                        f"Environment variable '{blocked}' is explicitly blocked by policy",
+                        code="BLOCKED_ENV_VAR",
+                        suggestion=f"Remove '{blocked}' from env_vars"
+                    )
+                if blocked in current_allowed_env_vars:
+                    result.add_error(
+                        "allowed_env_vars",
+                        f"Forwarding environment variable '{blocked}' is explicitly blocked by policy",
+                        code="BLOCKED_ENV_VAR",
+                        suggestion=f"Remove '{blocked}' from allowed_env_vars"
+                    )
+        
+        # Check against system-level constraints
+        if constraints.blocked_env_vars:
+             for blocked in constraints.blocked_env_vars:
+                if blocked in current_env_vars:
+                     result.add_error(
+                        "env_vars",
+                        f"Environment variable '{blocked}' is blocked by system constraints",
+                        code="BLOCKED_ENV_VAR"
+                    )
+                if blocked in current_allowed_env_vars:
+                    result.add_error(
+                        "allowed_env_vars",
+                        f"Forwarding environment variable '{blocked}' is blocked by system constraints",
+                        code="BLOCKED_ENV_VAR"
+                    )
+
         # Add warnings for best practices
         if hasattr(policy, 'memory_mb'):
             memory_mb = getattr(policy, 'memory_mb', None)

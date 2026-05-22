@@ -1,13 +1,23 @@
-"""Isolated Agents SDK — public API.
+"""Isolated Agents SDK — Public API.
 
-Three entry-point functions:
-  - run_agent()        — synchronous, blocks until agent completes
-  - async_run_agent()  — async variant using asyncio
-  - list_sessions()    — returns all currently active sessions
+Securely run AI agents in rootless containers with advanced telemetry,
+structured output validation, and framework-agnostic support.
 
-Adapter Support:
-  - configure_adapters() — configure adapters from dict, file, or environment
-  - get_adapter_registry() — access the global adapter registry
+Main Functions:
+  - run_agent()        — Synchronous execution, blocks until agent completion.
+  - async_run_agent()  — Asynchronous execution using asyncio.
+  - list_sessions()    — Retrieve all currently active agent sessions.
+
+Decorators:
+  - @isolated_agent    — Run a function as an isolated agent.
+  - @policy, @network  — Configure environment and sandbox constraints.
+  - @resources, @retry — Manage resource limits and resilience.
+  - @langchain, @crewai — Pre-configure for specific agent frameworks.
+  - @structured_output — Enforce JSON Schema validation on return values.
+
+Telemetry & Adapters:
+  - configure_adapters() — Configure custom container, storage, or audit backends.
+  - get_adapter_registry() — Access initialized adapter instances.
 """
 
 from __future__ import annotations
@@ -15,8 +25,9 @@ from __future__ import annotations
 import asyncio
 import tempfile
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Callable, Optional, Dict, Any
+from typing import Callable, Optional, Dict, Any, Union
 
 from isolated_agents_sdk.models import (
     NetworkPolicy,
@@ -39,6 +50,42 @@ from isolated_agents_sdk.container_provisioner import ContainerProvisioner, Cont
 from isolated_agents_sdk.agent_runner import AgentRunner
 from isolated_agents_sdk.output_collector import OutputCollector
 from isolated_agents_sdk.session_manager import SessionManager, IsolatedSession
+from isolated_agents_sdk.scheduler import AgentScheduler, ScheduledTask
+from isolated_agents_sdk.runtime import AgentRuntime
+from isolated_agents_sdk.logging import setup_logging
+
+# Initialize default logging on import
+setup_logging()
+
+# Import decorators
+from isolated_agents_sdk.decorators import (
+    isolated_agent,
+    policy,
+    network,
+    resources,
+    dependencies,
+    env_vars,
+    forward_env,
+    timeout,
+    telemetry,
+    interactive,
+    structured_output,
+    base_image,
+    entrypoint,
+    retry,
+    cache,
+    langchain,
+    crewai,
+    node,
+    llamaindex,
+    selenium,
+)
+
+# Composability API
+from isolated_agents_sdk.composability import chain, parallel, StateGraph
+
+# Sub-Agent API (for use within agents)
+from isolated_agents_sdk.sub_agent_client import spawn_sub_agent
 
 # Adapter support (optional, backward compatible)
 try:
@@ -86,7 +133,10 @@ def configure_adapters(
                 "container": {"type": "podman", "config": {...}},
                 "storage": {"type": "local", "config": {...}},
                 "audit": {"type": "file", "config": {...}},
-                "policy": {"type": "default", "config": {...}}
+                "policy": {"type": "default", "config": {...}},
+                "database_adapters": {
+                    "main_db": {"type": "sql", "url": "sqlite:///:memory:"}
+                }
             }
         config_file: Path to YAML or JSON configuration file
         from_env: Load configuration from environment variables (ISOLATED_AGENTS_*)
@@ -152,6 +202,11 @@ def run_agent(
     policy: Optional[Policy] = None,
     host_output_path: Optional[str | Path] = None,
     adapter_config: Optional[Dict[str, Any]] = None,
+    agent_args: tuple = (),
+    agent_kwargs: Optional[Dict[str, Any]] = None,
+    spawn_socket_path: Optional[str] = None,
+    on_stdout: Optional[Callable[[str], None]] = None,
+    on_stderr: Optional[Callable[[str], None]] = None,
 ) -> AgentResult:
     """Launch *agent* in an isolated rootless Podman container and block until completion.
 
@@ -166,6 +221,8 @@ def run_agent(
             ``AgentResult.artifacts``, but no files are kept on disk.
         adapter_config: Optional adapter configuration for this specific run.
             If provided, temporarily configures adapters for this execution only.
+        agent_args: Positional arguments to pass to the *agent* callable.
+        agent_kwargs: Keyword arguments to pass to the *agent* callable.
 
     Returns:
         An :class:`AgentResult` with the agent's exit code and any output artifacts.
@@ -205,7 +262,18 @@ def run_agent(
         )
 
     return asyncio.run(
-        async_run_agent(agent, working_dir, policy, host_output_path, adapter_config)
+        async_run_agent(
+            agent,
+            working_dir,
+            policy,
+            host_output_path,
+            adapter_config,
+            agent_args,
+            agent_kwargs,
+            spawn_socket_path,
+            on_stdout,
+            on_stderr,
+        )
     )
 
 
@@ -215,6 +283,15 @@ async def async_run_agent(
     policy: Optional[Policy] = None,
     host_output_path: Optional[str | Path] = None,
     adapter_config: Optional[Dict[str, Any]] = None,
+    agent_args: tuple = (),
+    agent_kwargs: Optional[Dict[str, Any]] = None,
+    agent_payload_hex: Optional[str] = None,
+    spawn_socket_path: Optional[str] = None,
+    on_stdout: Optional[Callable[[str], None]] = None,
+    on_stderr: Optional[Callable[[str], None]] = None,
+    audit_logger: Optional[AuditLogger] = None,
+    session_id: Optional[str] = None,
+    parent_session_id: Optional[str] = None,
 ) -> AgentResult:
     """Launch *agent* in an isolated container asynchronously."""
     # Apply adapter configuration if provided
@@ -226,14 +303,66 @@ async def async_run_agent(
     # If host_output_path is provided, we'll let OutputCollector create a local adapter for it
     storage_adapter = registry.get_storage_adapter() if (registry and not host_output_path) else None
     
-    validated_policy = _policy_validator.validate(policy)
-    audit_logger = AuditLogger(log_output_path=validated_policy.log_output_path)
+    validated_policy = await _policy_validator.validate(policy)
+    
+    # Advanced Logging: Setup audit logger with telemetry if enabled
+    if audit_logger:
+        pass # use the passed in logger
+    elif validated_policy.enable_telemetry and _ADAPTERS_AVAILABLE:
+        from isolated_agents_sdk.adapters.audit.file import FileAuditAdapter
+        from isolated_agents_sdk.adapters.audit.telemetry import TelemetryAuditAdapter
+        from isolated_agents_sdk.adapters.audit.composite import CompositeAuditAdapter
+        
+        adapters = [TelemetryAuditAdapter()]
+        if validated_policy.log_output_path:
+            adapters.append(FileAuditAdapter(log_file=validated_policy.log_output_path))
+        
+        audit_logger = AuditLogger(adapter=CompositeAuditAdapter(adapters))
+    else:
+        audit_logger = AuditLogger(log_output_path=validated_policy.log_output_path)
 
-    session_id = str(uuid.uuid4())
+    if not session_id:
+        session_id = str(uuid.uuid4())
+
+    # Handle Sub-Agent Spawn Socket if enabled but no path provided (Host-initiated)
+    if validated_policy.allow_sub_agents and not spawn_socket_path:
+        from isolated_agents_sdk.runtime import get_runtime
+        runtime = get_runtime(working_dir=working_dir)
+        if not runtime._is_running:
+            await runtime.start()
+        # Note: we use internal _create_session_socket. 
+        # In a real SDK we might make this a public part of the Runtime API.
+        spawn_socket_path = await runtime._create_session_socket(session_id)
+
     if validated_policy.entrypoint:
         agent_id = " ".join(validated_policy.entrypoint[:2])
     else:
         agent_id = getattr(agent, "__name__", "agent")
+
+    # Log session creation for telemetry
+    await audit_logger.log_event(
+        event_type="session_created",
+        session_id=session_id,
+        agent_id=agent_id,
+        payload={
+            "runtime": container_adapter.get_adapter_name() if container_adapter else "Podman",
+            "storage": "Local Filesystem",
+            "logger": "Composite" if validated_policy.enable_telemetry else "File"
+        }
+    )
+
+    # Log policy details for telemetry
+    await audit_logger.log_event(
+        event_type="policy_validated",
+        session_id=session_id,
+        agent_id=agent_id,
+        payload={
+            "cpu_cores": validated_policy.cpu_cores,
+            "memory_mb": validated_policy.memory_mb,
+            "network_enabled": not validated_policy.network.disabled,
+            "timeout_seconds": validated_policy.timeout_seconds
+        }
+    )
 
     provisioner = ContainerProvisioner(
         adapter=container_adapter,
@@ -244,6 +373,7 @@ async def async_run_agent(
         policy=validated_policy,
         session_id=session_id,
         agent_id=agent_id,
+        spawn_socket_path=spawn_socket_path,
     )
 
     runner = AgentRunner(
@@ -263,6 +393,8 @@ async def async_run_agent(
         agent_id=agent_id,
         process=None,
         policy=validated_policy,
+        audit_logger=audit_logger,
+        parent_session_id=parent_session_id,
     )
 
     exit_code = 1
@@ -273,6 +405,12 @@ async def async_run_agent(
             policy=validated_policy,
             session_id=session_id,
             agent_id=agent_id,
+            agent_args=agent_args,
+            agent_kwargs=agent_kwargs,
+            agent_payload_hex=agent_payload_hex,
+            spawn_socket_path=spawn_socket_path,
+            on_stdout=on_stdout,
+            on_stderr=on_stderr,
         )
         exit_code = run_result.exit_code
 
@@ -290,15 +428,15 @@ async def async_run_agent(
 
         result = await collector.collect(
             container_id=handle.container_id,
-            output_path_in_container=validated_policy.output_path_in_container,
+            policy=validated_policy,
             host_output_path=effective_host_output_path,
-            max_output_bytes=validated_policy.max_output_bytes,
             exit_code=exit_code,
             session_id=session_id,
             agent_id=agent_id,
+            error=run_result.error,
         )
     finally:
-        await _session_manager.complete_session(session_id, exit_code)
+        await _session_manager.complete_session(session_id, exit_code, error=run_result.error if 'run_result' in locals() else "Execution failed during setup")
 
     return result  # type: ignore[return-value]
 
@@ -358,10 +496,110 @@ async def sync_artifact(
     await _session_manager.sync_artifact(session_id, container_path, host_path)
 
 
+# ---------------------------------------------------------------------------
+# Scheduling API
+# ---------------------------------------------------------------------------
+
+_agent_scheduler = AgentScheduler(async_run_agent)
+
+async def start_scheduler() -> None:
+    """Start the background agent scheduler.
+    
+    Must be called within an active asyncio event loop.
+    """
+    await _agent_scheduler.start()
+
+
+async def stop_scheduler() -> None:
+    """Stop the background agent scheduler."""
+    await _agent_scheduler.stop()
+
+
+def schedule_agent_in(
+    delay: Union[int, float, timedelta],
+    agent: Optional[Callable],
+    working_dir: str | Path,
+    policy: Optional[Policy] = None,
+    args: tuple = (),
+    kwargs: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Schedule an agent to run after a delay.
+    
+    Args:
+        delay: Delay in seconds or timedelta.
+        agent: Agent callable or None (if entrypoint in policy).
+        working_dir: Path to the agent workspace.
+        policy: Optional execution policy.
+        args/kwargs: Agent arguments.
+        
+    Returns:
+        Task ID string.
+    """
+    return _agent_scheduler.schedule_in(
+        delay=delay,
+        agent=agent,
+        working_dir=str(working_dir),
+        policy=policy,
+        args=args,
+        kwargs=kwargs
+    )
+
+
+def schedule_agent_at(
+    run_at: datetime,
+    agent: Optional[Callable],
+    working_dir: str | Path,
+    policy: Optional[Policy] = None,
+    args: tuple = (),
+    kwargs: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Schedule an agent to run at a specific UTC time."""
+    return _agent_scheduler.schedule_at(
+        run_at=run_at,
+        agent=agent,
+        working_dir=str(working_dir),
+        policy=policy,
+        args=args,
+        kwargs=kwargs
+    )
+
+
+def schedule_agent_interval(
+    interval: Union[int, float, timedelta],
+    agent: Optional[Callable],
+    working_dir: str | Path,
+    policy: Optional[Policy] = None,
+    args: tuple = (),
+    kwargs: Optional[Dict[str, Any]] = None,
+    start_at: Optional[datetime] = None,
+) -> str:
+    """Schedule an agent to run repeatedly at fixed intervals."""
+    return _agent_scheduler.schedule_interval(
+        interval=interval,
+        agent=agent,
+        working_dir=str(working_dir),
+        policy=policy,
+        args=args,
+        kwargs=kwargs,
+        start_at=start_at
+    )
+
+
+def cancel_scheduled_agent(task_id: str) -> bool:
+    """Cancel a pending or recurring scheduled agent task."""
+    return _agent_scheduler.cancel(task_id)
+
+
+def list_scheduled_agents() -> list[ScheduledTask]:
+    """Return all currently scheduled and completed tasks."""
+    return _agent_scheduler.list_tasks()
+
+
 async def start_agent_daemon(
     agent: Optional[Callable],
     working_dir: str | Path,
     policy: Optional[Policy] = None,
+    spawn_socket_path: Optional[str] = None,
 ) -> SessionInfo:
     """Start an agent in the background and return a handle immediately.
 
@@ -369,12 +607,23 @@ async def start_agent_daemon(
         agent: Any callable to execute inside the container (ignored if policy.entrypoint is set).
         working_dir: Host path to the working directory.
         policy: Optional :class:`Policy`.
-
-    Returns:
-        A :class:`SessionInfo` object describing the newly created session.
+        spawn_socket_path: Optional path to the host-side spawn socket.
     """
-    validated_policy = _policy_validator.validate(policy)
-    audit_logger = AuditLogger(log_output_path=validated_policy.log_output_path)
+    validated_policy = await _policy_validator.validate(policy)
+    
+    # Advanced Logging: Setup audit logger with telemetry if enabled
+    if validated_policy.enable_telemetry and _ADAPTERS_AVAILABLE:
+        from isolated_agents_sdk.adapters.audit.file import FileAuditAdapter
+        from isolated_agents_sdk.adapters.audit.telemetry import TelemetryAuditAdapter
+        from isolated_agents_sdk.adapters.audit.composite import CompositeAuditAdapter
+        
+        adapters = [TelemetryAuditAdapter()]
+        if validated_policy.log_output_path:
+            adapters.append(FileAuditAdapter(log_file=validated_policy.log_output_path))
+        
+        audit_logger = AuditLogger(adapter=CompositeAuditAdapter(adapters))
+    else:
+        audit_logger = AuditLogger(log_output_path=validated_policy.log_output_path)
 
     session_id = str(uuid.uuid4())
     if validated_policy.entrypoint:
@@ -388,6 +637,7 @@ async def start_agent_daemon(
         policy=validated_policy,
         session_id=session_id,
         agent_id=agent_id,
+        spawn_socket_path=spawn_socket_path,
     )
 
     # Register the session
@@ -430,6 +680,16 @@ __all__ = [
     "run_agent",
     "async_run_agent",
     "start_agent_daemon",
+    "isolated_agent",
+    "policy",
+    "network",
+    "resources",
+    "dependencies",
+    "env_vars",
+    "forward_env",
+    "timeout",
+    "telemetry",
+    "interactive",
     "list_sessions",
     "get_session_metrics",
     "exec_in_session",

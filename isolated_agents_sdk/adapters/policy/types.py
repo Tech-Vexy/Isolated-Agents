@@ -98,6 +98,8 @@ class PolicyConstraints:
         blocked_pip_packages: List of blocked pip packages
         require_network_policy: Whether network policy is required
         require_readonly_rootfs: Whether read-only rootfs is required
+        allowed_ingress_ports: List of allowed ingress ports (None = all allowed)
+        blocked_env_vars: List of explicitly blocked environment variable names
     """
     max_memory_mb: Optional[int] = None
     max_cpu_cores: Optional[float] = None
@@ -106,5 +108,7 @@ class PolicyConstraints:
     blocked_pip_packages: list[str] = field(default_factory=list)
     require_network_policy: bool = False
     require_readonly_rootfs: bool = False
+    allowed_ingress_ports: Optional[list[int]] = None
+    blocked_env_vars: list[str] = field(default_factory=list)
 
 # Made with Bob

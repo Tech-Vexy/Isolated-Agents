@@ -63,11 +63,14 @@ class FileAuditAdapter(AuditAdapter):
         """
         super().__init__()
         
+        self._fixed_log_file = None
+        
         # Determine log path from either log_path or log_file
-        if log_path:
+        if log_file:
+            self._fixed_log_file = Path(log_file)
+            self._log_path = self._fixed_log_file.parent
+        elif log_path:
             self._log_path = Path(log_path)
-        elif log_file:
-            self._log_path = Path(log_file).parent
         else:
             self._log_path = Path("./.isolated_agents/logs")
             
@@ -80,7 +83,8 @@ class FileAuditAdapter(AuditAdapter):
             return
         
         try:
-            self._log_path.mkdir(parents=True, exist_ok=True)
+            if self._log_path:
+                self._log_path.mkdir(parents=True, exist_ok=True)
             self._initialized = True
         except Exception as e:
             raise AdapterInitializationError(
@@ -107,6 +111,8 @@ class FileAuditAdapter(AuditAdapter):
         user_id: Optional[str] = None,
         severity: str = "info",
         tags: Optional[dict[str, str]] = None,
+        timestamp: Optional[str] = None,
+        raw_event_type: Optional[str] = None,
     ) -> str:
         """Log an audit event to file."""
         if not self._initialized:
@@ -114,13 +120,21 @@ class FileAuditAdapter(AuditAdapter):
         
         # Generate event ID
         event_id = str(uuid.uuid4())
-        timestamp = datetime.now()
+        
+        # Parse timestamp or use current time
+        if timestamp:
+            try:
+                dt_timestamp = datetime.fromisoformat(timestamp)
+            except ValueError:
+                dt_timestamp = datetime.now()
+        else:
+            dt_timestamp = datetime.now()
         
         # Create event
         event = AuditEvent(
             event_id=event_id,
             event_type=event_type,
-            timestamp=timestamp,
+            timestamp=dt_timestamp,
             session_id=session_id,
             agent_id=agent_id,
             user_id=user_id,
@@ -129,13 +143,21 @@ class FileAuditAdapter(AuditAdapter):
             tags=tags or {},
         )
         
+        # We need to preserve raw_event_type if provided for backward compatibility
+        # in the serialized output.
+        serialized_data = self._serialize_event(event)
+        if raw_event_type:
+            obj = json.loads(serialized_data)
+            obj["event_type"] = raw_event_type
+            serialized_data = json.dumps(obj)
+        
         # Get log file for today
-        log_file = self._get_log_file(timestamp)
+        log_file = self._get_log_file(dt_timestamp)
         
         # Append event to log file
         try:
             with log_file.open("a") as f:
-                f.write(self._serialize_event(event) + "\n")
+                f.write(serialized_data + "\n")
         except Exception as e:
             raise AdapterOperationError(
                 f"Failed to write audit event: {e}"
@@ -320,6 +342,8 @@ class FileAuditAdapter(AuditAdapter):
     
     def _get_log_file(self, timestamp: datetime) -> Path:
         """Get log file path for a given timestamp."""
+        if self._fixed_log_file:
+            return self._fixed_log_file
         date_str = timestamp.strftime("%Y-%m-%d")
         return self._log_path / f"{date_str}.jsonl"
     

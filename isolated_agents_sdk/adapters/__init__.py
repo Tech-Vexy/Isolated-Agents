@@ -57,6 +57,10 @@ from isolated_agents_sdk.adapters.storage.types import (
     StorageLocation,
     StorageStats,
 )
+from isolated_agents_sdk.adapters.database.base import DatabaseAdapter
+from isolated_agents_sdk.adapters.database.sql import SQLDatabaseAdapter
+from isolated_agents_sdk.adapters.database.nosql import NoSQLDatabaseAdapter
+from isolated_agents_sdk.adapters.database.vector import VectorDatabaseAdapter
 
 __all__ = [
     # Base classes
@@ -65,12 +69,17 @@ __all__ = [
     "StorageAdapter",
     "AuditAdapter",
     "PolicyValidator",
+    "DatabaseAdapter",
     # Container adapters
     "PodmanAdapter",
     # Storage adapters
     "LocalStorageAdapter",
     # Audit adapters
     "FileAuditAdapter",
+    # Database adapters
+    "SQLDatabaseAdapter",
+    "NoSQLDatabaseAdapter",
+    "VectorDatabaseAdapter",
     # Policy adapters
     "DefaultPolicyValidator",
     # Factory

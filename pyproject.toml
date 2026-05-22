@@ -1,10 +1,13 @@
 [project]
 name = "isolated-agents-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Wrap any AI agent in a rootless Podman container for automatic isolation."
 requires-python = ">=3.11"
 dependencies = [
     "cloudpickle>=3.0",
+    "jsonschema>=4.20",
+    "colorlog>=6.8.0",
+    "flask[examples]>=3.1.3",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +32,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["isolated_agents_sdk"]
+
+[project.scripts]
+isolated-agents = "isolated_agents_sdk.__main__:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
