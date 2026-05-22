@@ -294,10 +294,13 @@ async def async_run_agent(
     parent_session_id: Optional[str] = None,
 ) -> AgentResult:
     """Launch *agent* in an isolated container asynchronously."""
-    # Apply adapter configuration if provided
     if adapter_config and _ADAPTERS_AVAILABLE:
-        configure_adapters(config=adapter_config)
-    
+        # Per-call config used to override globals only when no global registry
+        # has been initialized — avoids racing concurrent callers who would
+        # otherwise overwrite each other's adapter selections.
+        if not _adapter_config_applied:
+            configure_adapters(config=adapter_config)
+
     registry = get_adapter_registry() if _ADAPTERS_AVAILABLE else None
     container_adapter = registry.get_container_adapter() if registry else None
     # If host_output_path is provided, we'll let OutputCollector create a local adapter for it
@@ -399,6 +402,7 @@ async def async_run_agent(
 
     exit_code = 1
     result: Optional[AgentResult] = None
+    run_error: Optional[str] = "Execution failed during setup"
     try:
         run_result = await runner.run(
             agent=agent,
@@ -413,6 +417,7 @@ async def async_run_agent(
             on_stderr=on_stderr,
         )
         exit_code = run_result.exit_code
+        run_error = run_result.error
 
         # Collect output artifacts from the container.
         collector = OutputCollector(
@@ -420,7 +425,7 @@ async def async_run_agent(
             storage_adapter=storage_adapter,
             audit_logger=audit_logger
         )
-        
+
         # If host_output_path is not provided, create a temporary directory
         effective_host_output_path = host_output_path
         if effective_host_output_path is None:
@@ -433,10 +438,10 @@ async def async_run_agent(
             exit_code=exit_code,
             session_id=session_id,
             agent_id=agent_id,
-            error=run_result.error,
+            error=run_error,
         )
     finally:
-        await _session_manager.complete_session(session_id, exit_code, error=run_result.error if 'run_result' in locals() else "Execution failed during setup")
+        await _session_manager.complete_session(session_id, exit_code, error=run_error)
 
     return result  # type: ignore[return-value]
 
