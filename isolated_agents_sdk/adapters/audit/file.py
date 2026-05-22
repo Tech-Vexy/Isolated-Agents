@@ -193,7 +193,7 @@ class FileAuditAdapter(AuditAdapter):
                         except Exception:
                             # Skip malformed lines
                             continue
-            except Exception as e:
+            except Exception:
                 # Skip files that can't be read
                 continue
         

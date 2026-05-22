@@ -28,7 +28,7 @@ from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
 from isolated_agents_sdk.adapters.storage.base import StorageAdapter
 from isolated_agents_sdk.adapters.storage.local import LocalStorageAdapter
 from isolated_agents_sdk.audit_logger import AuditLogger
-from isolated_agents_sdk.exceptions import ContainerError, OutputSizeLimitError
+from isolated_agents_sdk.exceptions import OutputSizeLimitError
 from isolated_agents_sdk.models import AgentResult, Policy, CONTAINER_OUTPUT_PATH
 
 # Detect if adapters are available

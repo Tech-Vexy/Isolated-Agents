@@ -10,7 +10,6 @@ import asyncio
 import atexit
 import logging
 import signal
-import subprocess
 import threading
 import json
 from dataclasses import dataclass
@@ -411,7 +410,6 @@ class SessionManager:
             
         try:
             import json
-            from dataclasses import asdict
             entry = {
                 "event_type": "container_destroyed",
                 "timestamp": datetime.now(timezone.utc).isoformat(),

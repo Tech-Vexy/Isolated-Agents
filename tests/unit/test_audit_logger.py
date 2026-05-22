@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import sys
-import tempfile
 import unittest.mock
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 

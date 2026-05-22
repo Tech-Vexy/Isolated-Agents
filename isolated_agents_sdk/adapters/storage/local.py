@@ -133,7 +133,7 @@ class LocalStorageAdapter(StorageAdapter):
         meta_path = metadata_dir / f"{artifact_name}.meta"
         try:
             meta_path.write_text(self._serialize_metadata(meta))
-        except Exception as e:
+        except Exception:
             # Non-fatal - artifact is stored even if metadata fails
             pass
         

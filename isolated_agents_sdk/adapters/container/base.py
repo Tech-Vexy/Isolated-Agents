@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Optional
+from typing import Callable, Optional
 
 from isolated_agents_sdk.adapters.base import BaseAdapter
 from isolated_agents_sdk.adapters.container.types import (

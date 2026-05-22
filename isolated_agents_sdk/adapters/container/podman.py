@@ -7,7 +7,7 @@ import json
 import os
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
 from isolated_agents_sdk.adapters.container.types import (
@@ -20,8 +20,6 @@ from isolated_agents_sdk.adapters.container.types import (
     SecurityConfig,
 )
 from isolated_agents_sdk.adapters.exceptions import (
-    AdapterError,
-    AdapterInitializationError,
     AdapterOperationError,
 )
 from isolated_agents_sdk.exceptions import PodmanNotFoundError
@@ -225,7 +223,6 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         user: Optional[str] = None,
     ) -> int:
         """Execute an interactive command in a running container."""
-        import sys
         import subprocess
 
         cmd = ["podman", "exec", "-it"]
@@ -414,7 +411,7 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             # All user-writable mounts MUST have a size limit to prevent host DoS (Issue 4)
             size_opt = f"size={security_config.tmpfs_size_mb}m"
             cmd.extend(["--tmpfs", f"/tmp:rw,nosuid,nodev,{size_opt}"])
-            cmd.extend(["--tmpfs", f"/run:rw,noexec,nosuid,nodev,size=64m"])
+            cmd.extend(["--tmpfs", "/run:rw,noexec,nosuid,nodev,size=64m"])
             
             # v0.2.1 Filter: Only add the default /output tmpfs if it wasn't already 
             # explicitly requested as a mount. This prevents "duplicate mount destination" errors.

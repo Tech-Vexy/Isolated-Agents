@@ -3,14 +3,12 @@
 Feature: isolated-agents-sdk
 """
 
-import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from hypothesis import given, settings, strategies as st
 
-from isolated_agents_sdk.container_provisioner import ContainerProvisioner
 from isolated_agents_sdk.models import NetworkPolicy, Policy
 from isolated_agents_sdk.adapters.container.types import ResourceLimits, NetworkConfig, SecurityConfig
 
@@ -63,9 +61,11 @@ async def test_policy_to_adapter_mapping(policy: Policy) -> None:
     mock_adapter.provision_container = AsyncMock(return_value=MagicMock(container_id="cid", image="img"))
     
     import tempfile
+    from isolated_agents_sdk.container_provisioner import ContainerProvisioner
     with tempfile.TemporaryDirectory() as tmp_dir:
         working_dir = Path(tmp_dir)
-        
+
+        provisioner = ContainerProvisioner(adapter=mock_adapter)
         await provisioner.provision(
             working_dir=working_dir,
             policy=policy,

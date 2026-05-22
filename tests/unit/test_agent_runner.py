@@ -5,14 +5,9 @@ Requirements: 2.3, 6.2
 
 from __future__ import annotations
 
-import asyncio
-import tempfile
-from pathlib import Path
-from typing import Callable, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import cloudpickle
 
 from isolated_agents_sdk.agent_runner import AgentRunner
 from isolated_agents_sdk.audit_logger import AuditLogger
@@ -21,7 +16,6 @@ from isolated_agents_sdk.models import (
     AgentResult,
     Policy,
     CONTAINER_BOOTSTRAP_PATH,
-    CONTAINER_OUTPUT_PATH,
     CONTAINER_SOURCE_PATH,
 )
 from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter

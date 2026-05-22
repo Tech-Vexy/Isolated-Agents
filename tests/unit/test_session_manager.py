@@ -8,11 +8,8 @@ Covers:
 
 from __future__ import annotations
 
-import atexit
 import signal
-import threading
-import asyncio
-from unittest.mock import MagicMock, patch, call, AsyncMock, ANY
+from unittest.mock import MagicMock, patch, AsyncMock, ANY
 
 import pytest
 

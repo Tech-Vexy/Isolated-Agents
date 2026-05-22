@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from isolated_agents_sdk.adapters.exceptions import AdapterOperationError
 from isolated_agents_sdk.adapters.policy.base import PolicyValidator
 from isolated_agents_sdk.adapters.policy.types import (
     PolicyConstraints,

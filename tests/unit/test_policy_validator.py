@@ -10,7 +10,7 @@ import json
 import pytest
 
 from isolated_agents_sdk.exceptions import PolicyValidationError
-from isolated_agents_sdk.models import NetworkPolicy, Policy
+from isolated_agents_sdk.models import Policy
 from isolated_agents_sdk.policy_validator import PolicyValidator
 
 

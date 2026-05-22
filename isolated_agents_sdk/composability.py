@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import inspect
-from typing import Any, Callable, List, TypeVar, Union, Optional, Dict, Set
+from typing import Any, Callable, List, TypeVar, Optional, Dict
 
 from isolated_agents_sdk.models import AgentResult
 

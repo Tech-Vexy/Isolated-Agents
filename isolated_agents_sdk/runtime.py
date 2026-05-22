@@ -86,7 +86,7 @@ class AgentRuntime:
         self._is_running = True
         
         logger.info(
-            f"Agent Runtime started.", 
+            "Agent Runtime started.",
             extra={"runtime_id": self.runtime_id, "workspace": str(self.working_dir)}
         )
 
@@ -158,8 +158,9 @@ class AgentRuntime:
             return None
 
         socket_path_obj = self.working_dir / "sockets" / f"{session_id}.sock"
+        socket_path_obj.parent.mkdir(parents=True, exist_ok=True)
         socket_path = str(socket_path_obj)
-        
+
         # Cleanup if exists (e.g. from a previous crashed run)
         if socket_path_obj.exists():
             socket_path_obj.unlink()
@@ -168,9 +169,10 @@ class AgentRuntime:
         async def handler(reader, writer):
             await self._handle_session_request(reader, writer, session_id)
 
+        server = await asyncio.start_unix_server(handler, path=socket_path)
         self._session_servers[session_id] = server
         self._session_sockets[session_id] = socket_path
-        
+
         return socket_path
 
     async def _close_session_socket(self, session_id: str) -> None:
@@ -511,14 +513,6 @@ class AgentRuntime:
             return {"status": "success", "results": results}
         except Exception as e:
             return {"status": "error", "error": str(e)}
-                
-            writer.write(json.dumps(response).encode())
-            await writer.drain()
-        except Exception as e:
-            logger.error(f"Error handling spawn request: {e}")
-        finally:
-            writer.close()
-            await writer.wait_closed()
 
     @property
     def spawn_socket_path(self) -> Optional[str]:

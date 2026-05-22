@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Optional, Type
+from typing import Type
 
-from isolated_agents_sdk.adapters.base import BaseAdapter
 from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
 from isolated_agents_sdk.adapters.container.podman import PodmanAdapter
 from isolated_agents_sdk.adapters.container.docker import DockerAdapter

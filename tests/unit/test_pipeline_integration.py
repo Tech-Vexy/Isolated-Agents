@@ -10,10 +10,7 @@ Verifies:
 
 from __future__ import annotations
 
-import asyncio
 import os
-import shutil
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch, AsyncMock
 
@@ -24,8 +21,6 @@ from isolated_agents_sdk import (
     AgentResult,
     Policy,
     async_run_agent,
-    get_adapter_registry,
-    configure_adapters,
 )
 from isolated_agents_sdk.adapters import AdapterRegistry
 from isolated_agents_sdk.exceptions import PodmanNotFoundError, WorkingDirectoryError

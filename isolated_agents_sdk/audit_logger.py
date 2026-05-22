@@ -5,13 +5,9 @@ Emits AuditEvent objects via an AuditAdapter.
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-import sys
-from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Optional, Any
+from typing import Optional
 
 from isolated_agents_sdk.adapters.audit.base import AuditAdapter
 from isolated_agents_sdk.adapters.audit.file import FileAuditAdapter

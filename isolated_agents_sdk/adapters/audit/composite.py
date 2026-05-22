@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
 from isolated_agents_sdk.adapters.audit.base import AuditAdapter
 from isolated_agents_sdk.adapters.audit.types import (

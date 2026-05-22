@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import subprocess
-from pathlib import Path
 from typing import Optional
 
 from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter

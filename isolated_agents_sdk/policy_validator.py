@@ -5,7 +5,7 @@ This module provides a PolicyValidator class that wraps PolicyValidator adapters
 
 from __future__ import annotations
 
-from typing import Optional, Any
+from typing import Optional
 
 from isolated_agents_sdk.adapters.policy.base import PolicyValidator as IPolicyValidator
 from isolated_agents_sdk.adapters.policy.default import DefaultPolicyValidator

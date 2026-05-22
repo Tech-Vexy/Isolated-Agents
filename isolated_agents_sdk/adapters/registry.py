@@ -27,7 +27,7 @@ Example:
 """
 
 import threading
-from typing import Dict, Optional, Type
+from typing import Dict, Optional
 
 from isolated_agents_sdk.adapters.audit.base import AuditAdapter
 from isolated_agents_sdk.adapters.config import AdapterConfig

@@ -5,7 +5,6 @@ Feature: isolated-agents-sdk
 
 from __future__ import annotations
 
-import asyncio
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -15,7 +14,6 @@ from hypothesis import given, settings, strategies as st
 
 from isolated_agents_sdk.models import AgentResult
 from isolated_agents_sdk.output_collector import OutputCollector
-from isolated_agents_sdk.adapters.container.types import ExecResult
 
 
 # ---------------------------------------------------------------------------

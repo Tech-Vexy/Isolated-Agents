@@ -5,8 +5,6 @@ Feature: isolated-agents-sdk
 
 from __future__ import annotations
 
-import os
-import subprocess
 import tempfile
 import unittest.mock
 from pathlib import Path

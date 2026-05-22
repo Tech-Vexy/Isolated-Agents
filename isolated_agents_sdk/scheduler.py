@@ -6,7 +6,6 @@ Enables scheduling agents to run at specific times or intervals in background ta
 from __future__ import annotations
 
 import asyncio
-import logging
 import uuid
 from collections import deque
 from datetime import datetime, timedelta, timezone

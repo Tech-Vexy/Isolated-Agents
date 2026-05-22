@@ -138,7 +138,7 @@ class KubernetesAdapter(ContainerRuntimeAdapter):
             raise AdapterOperationError(f"Failed to create Pod: {stderr.decode()}")
             
         # Wait for Pod to be running
-        wait_cmd = ["kubectl", "wait", f"--for=condition=Ready", f"pod/{pod_name}", f"--namespace={self._namespace}", "--timeout=60s"]
+        wait_cmd = ["kubectl", "wait", "--for=condition=Ready", f"pod/{pod_name}", f"--namespace={self._namespace}", "--timeout=60s"]
         if self._context: wait_cmd.insert(1, "--context"); wait_cmd.insert(2, self._context)
         
         await self._run_kubectl(wait_cmd)
@@ -231,7 +231,7 @@ class KubernetesAdapter(ContainerRuntimeAdapter):
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
-            raise TimeoutError(f"kubectl component timed out")
+            raise TimeoutError("kubectl component timed out")
 
     def get_adapter_name(self) -> str:
         return "Kubernetes"

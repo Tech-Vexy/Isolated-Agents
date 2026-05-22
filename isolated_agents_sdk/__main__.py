@@ -2,10 +2,8 @@
 
 import argparse
 import asyncio
-import json
 import logging
 import sys
-from pathlib import Path
 from isolated_agents_sdk.runtime import AgentRuntime
 from isolated_agents_sdk.models import Policy, NetworkPolicy
 from isolated_agents_sdk.logging import setup_logging
@@ -22,13 +20,13 @@ async def run_runtime(args):
         runtime_id=args.id
     )
     
-    print(f"--- Isolated Agents SDK Runtime v0.2.0 ---")
+    print("--- Isolated Agents SDK Runtime v0.2.0 ---")
     print(f"ID: {runtime.runtime_id}")
     print(f"Workspace: {args.workspace}")
     
     try:
         await runtime.start()
-        print(f"Runtime is active. Press Ctrl+C to stop.")
+        print("Runtime is active. Press Ctrl+C to stop.")
         
         # Keep alive
         while True:

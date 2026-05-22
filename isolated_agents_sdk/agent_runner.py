@@ -26,6 +26,8 @@ from isolated_agents_sdk.models import (
     CONTAINER_SOURCE_PATH,
 )
 
+logger = logging.getLogger(__name__)
+
 # Detect if adapters are available
 try:
     from isolated_agents_sdk.adapters.registry import get_adapter_registry

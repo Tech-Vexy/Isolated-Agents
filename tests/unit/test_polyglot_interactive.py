@@ -8,7 +8,6 @@ Verifies:
 
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from unittest.mock import MagicMock, patch, AsyncMock
 
@@ -20,8 +19,6 @@ from isolated_agents_sdk import (
     start_agent_daemon,
     exec_in_session,
     sync_artifact,
-    get_adapter_registry,
-    configure_adapters,
 )
 from isolated_agents_sdk.adapters import AdapterRegistry
 
