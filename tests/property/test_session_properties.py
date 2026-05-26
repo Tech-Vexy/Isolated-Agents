@@ -4,6 +4,7 @@ Feature: isolated-agents-sdk
 """
 
 from __future__ import annotations
+import asyncio
 
 import tempfile
 import unittest.mock
@@ -114,31 +115,36 @@ def test_working_directory_contents_present_before_execution(
         # Mock subprocess.run so ContainerProvisioner.provision() doesn't
         # require a real Podman installation.
         fake_container_id = "abc123fakeid"
-        mock_result = unittest.mock.MagicMock()
-        mock_result.stdout = fake_container_id
-        mock_result.returncode = 0
+        
+        async def mock_exec(*args, **kwargs):
+            mock_proc = unittest.mock.AsyncMock()
+            mock_proc.returncode = 0
+            mock_proc.wait = unittest.mock.AsyncMock(return_value=0)
+            mock_proc.stdout.read = unittest.mock.AsyncMock(side_effect=[fake_container_id.encode() + b"\n", b""])
+            mock_proc.stderr.read = unittest.mock.AsyncMock(return_value=b"")
+            return mock_proc
 
-        with unittest.mock.patch("subprocess.run", return_value=mock_result) as mock_run:
+        with unittest.mock.patch("asyncio.create_subprocess_exec", side_effect=mock_exec) as mock_run:
             # Also mock shutil.which so _check_podman() passes
             with unittest.mock.patch("shutil.which", return_value="/usr/bin/podman"):
                 provisioner = ContainerProvisioner()
-                handle = provisioner.provision(
+                handle = asyncio.run(provisioner.provision(
                     working_dir=working_dir,
                     policy=policy,
                     session_id="test-session-001",
                     agent_id="test-agent-001",
-                )
+                ))
 
         # Confirm the container was provisioned with the correct ID
         assert handle.container_id == fake_container_id
 
         # Extract the podman run command that was passed to subprocess.run
         assert mock_run.called, "subprocess.run was never called — container was not provisioned"
-        podman_cmd: list[str] = mock_run.call_args[0][0]
+        podman_cmd: list[str] = list(mock_run.call_args[0])
 
         # The working directory MUST be mounted as /workspace:rw so that all
         # files are accessible inside the container before agent execution.
-        expected_mount = f"{working_dir}:/workspace:rw"
+        expected_mount = f"{working_dir}:/workspace:rw,nosuid,nodev"
         mount_args = [podman_cmd[i + 1] for i, arg in enumerate(podman_cmd) if arg == "-v"]
 
         assert expected_mount in mount_args, (
@@ -212,6 +218,16 @@ def test_container_destroyed_after_every_session(
 
     destroyed_containers: list[str] = []
 
+    async def fake_subprocess_exec(cmd, *args, **kwargs):
+        if cmd == "podman" and args and args[0] == "rm" and args[1] == "-f":
+            destroyed_containers.append(args[2])
+        mock_proc = unittest.mock.AsyncMock()
+        mock_proc.returncode = 0
+        mock_proc.wait = unittest.mock.AsyncMock(return_value=0)
+        mock_proc.stdout.read = unittest.mock.AsyncMock(return_value=b"")
+        mock_proc.stderr.read = unittest.mock.AsyncMock(return_value=b"")
+        return mock_proc
+
     def fake_subprocess_run(cmd, **kwargs):
         if cmd[:3] == ["podman", "rm", "-f"]:
             destroyed_containers.append(cmd[3])
@@ -220,7 +236,8 @@ def test_container_destroyed_after_every_session(
         result.stdout = ""
         return result
 
-    with unittest.mock.patch("subprocess.run", side_effect=fake_subprocess_run):
+    with unittest.mock.patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec), \
+         unittest.mock.patch("subprocess.run", side_effect=fake_subprocess_run):
         # Register the session (simulates container provisioned successfully)
         manager.register_session(
             session_id=session_id,
@@ -232,11 +249,11 @@ def test_container_destroyed_after_every_session(
 
         if termination_mode in ("normal", "error"):
             # Normal completion or agent error — complete_session destroys the container
-            manager.complete_session(session_id, effective_exit_code)
+            asyncio.run(manager.complete_session(session_id, effective_exit_code))
 
         elif termination_mode == "timeout":
             # Timeout — _timeout_session destroys the container
-            manager._timeout_session(session_id, timeout_seconds=1)
+            asyncio.run(manager._timeout_session(session_id, timeout_seconds=1))
 
         elif termination_mode == "unexpected_exit":
             # Unexpected SDK exit — destroy_all destroys all containers
@@ -308,13 +325,15 @@ def test_session_registry_reflects_active_sessions(
     audit_logger = AuditLogger(log_output_path=log_path)
     manager = SessionManager(audit_logger=audit_logger)
 
-    def fake_subprocess_run(cmd, **kwargs):
-        result = unittest.mock.MagicMock()
-        result.returncode = 0
-        result.stdout = ""
-        return result
+    async def fake_subprocess_exec(*args, **kwargs):
+        mock_proc = unittest.mock.AsyncMock()
+        mock_proc.returncode = 0
+        mock_proc.wait = unittest.mock.AsyncMock(return_value=0)
+        mock_proc.stdout.read = unittest.mock.AsyncMock(return_value=b"")
+        mock_proc.stderr.read = unittest.mock.AsyncMock(return_value=b"")
+        return mock_proc
 
-    with unittest.mock.patch("subprocess.run", side_effect=fake_subprocess_run):
+    with unittest.mock.patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
         # Register all sessions
         for session_id, container_id, agent_id in session_data:
             manager.register_session(
@@ -359,7 +378,7 @@ def test_session_registry_reflects_active_sessions(
         # Complete the chosen sessions
         for i in indices_to_complete:
             session_id = session_data[i][0]
-            manager.complete_session(session_id, exit_code=0)
+            asyncio.run(manager.complete_session(session_id, exit_code=0))
 
         # Assert completed sessions are no longer in list_sessions()
         after_completion = manager.list_sessions()
@@ -429,20 +448,22 @@ def test_timeout_terminates_session(
     # Track which containers were destroyed
     destroyed_containers: list[str] = []
 
-    def fake_subprocess_run(cmd, **kwargs):
-        if cmd[:3] == ["podman", "rm", "-f"]:
-            destroyed_containers.append(cmd[3])
-        result = unittest.mock.MagicMock()
-        result.returncode = 0
-        result.stdout = ""
-        return result
+    async def fake_subprocess_exec(cmd, *args, **kwargs):
+        if cmd == "podman" and args and args[0] == "rm" and args[1] == "-f":
+            destroyed_containers.append(args[2])
+        mock_proc = unittest.mock.AsyncMock()
+        mock_proc.returncode = 0
+        mock_proc.wait = unittest.mock.AsyncMock(return_value=0)
+        mock_proc.stdout.read = unittest.mock.AsyncMock(return_value=b"")
+        mock_proc.stderr.read = unittest.mock.AsyncMock(return_value=b"")
+        return mock_proc
 
     # Mock agent process to verify kill() is called
     mock_process = unittest.mock.MagicMock()
 
     policy = Policy(timeout_seconds=timeout_seconds)
 
-    with unittest.mock.patch("subprocess.run", side_effect=fake_subprocess_run):
+    with unittest.mock.patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
         manager.register_session(
             session_id=session_id,
             container_id=container_id,
@@ -452,7 +473,7 @@ def test_timeout_terminates_session(
         )
 
         # Simulate the timeout firing (avoids waiting for real wall-clock time)
-        manager._timeout_session(session_id, timeout_seconds)
+        asyncio.run(manager._timeout_session(session_id, timeout_seconds))
 
     # 1. Agent process MUST have been killed
     mock_process.kill.assert_called_once()

@@ -19,10 +19,10 @@ def processing_agent(steps=5):
 
 def main():
     setup_logging(level=logging.INFO)
-    
+
     # Custom callback to capture stream
     output_buffer = []
-    
+
     def my_stream_handler(chunk):
         # You could send this to a WebSocket, UI, or just filter it
         if "STEP" in chunk:
@@ -30,7 +30,7 @@ def main():
         output_buffer.append(chunk)
 
     print("--- Launching Agent with Streamed Outputs ---")
-    
+
     result = run_agent(
         agent=processing_agent,
         working_dir="./stream_workspace",

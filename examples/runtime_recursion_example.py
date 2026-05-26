@@ -17,10 +17,10 @@ from isolated_agents_sdk.logging import setup_logging
 # Agent logic that will run INSIDE the container
 def recursive_agent(level=0):
     print(f"--- Agent Level {level} starting (PID {os.getpid()}) ---")
-    
+
     # In v0.2.1, we can check our remaining hierarchical budget
     # (Future API: get_remaining_slice())
-    
+
     if level < 2:
         print(f"Level {level} spawning sub-agent for level {level+1}...")
         try:
@@ -39,7 +39,7 @@ def recursive_agent(level=0):
         except Exception as e:
             print(f"L{level} spawn error: {e}")
             return "Spawn Failure"
-    
+
     # Generate a large output to test IPC Framing (>64KB)
     large_payload = "X" * 100_000 # 100KB
     print(f"Level {level} (Leaf) returning 100KB payload via framed IPC...")
@@ -47,12 +47,12 @@ def recursive_agent(level=0):
 
 async def main():
     setup_logging(level=logging.INFO)
-    
+
     # Initialize the v0.2.1 Runtime
     # All internal state (sockets, pkls) now hidden in /run/isolated_agents_internal/
     runtime = AgentRuntime(working_dir="./runtime_workspace")
     await runtime.start()
-    
+
     try:
         print("Launching top-level agent (Total Budget: 512MB RAM)...")
         policy = Policy(
@@ -60,18 +60,18 @@ async def main():
             memory_mb=512,
             cpu_quota=1.0
         )
-        
+
         result = await runtime.run_agent(
             agent=recursive_agent,
             policy=policy,
             kwargs={"level": 0}
         )
-        
+
         print("\n--- Execution Summary ---")
         print(f"Exit Code: {result.exit_code}")
         if result.exit_code == 0:
             print(f"Result Length: {len(result.output['data'])} bytes (Successfully framed)")
-        
+
     finally:
         print("\nStopping Runtime & Reaping Orphaned Containers...")
         await runtime.stop()

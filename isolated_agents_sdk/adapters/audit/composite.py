@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
+from typing import Optional, Any
+from datetime import datetime
 
 from isolated_agents_sdk.adapters.audit.base import AuditAdapter
 from isolated_agents_sdk.adapters.audit.types import (
@@ -52,6 +53,8 @@ class CompositeAuditAdapter(AuditAdapter):
         user_id: Optional[str] = None,
         severity: str = "info",
         tags: Optional[dict[str, str]] = None,
+        timestamp: Optional[str] = None,
+        raw_event_type: Optional[str] = None,
     ) -> str:
         # We fire and forget or gather. Logging should generally not block excessively.
         # Returning the event ID from the first adapter that provides one.
@@ -66,7 +69,9 @@ class CompositeAuditAdapter(AuditAdapter):
                     payload=payload,
                     user_id=user_id,
                     severity=severity,
-                    tags=tags
+                    tags=tags,
+                    timestamp=timestamp,
+                    raw_event_type=raw_event_type,
                 )
                 if i == 0:
                     main_event_id = event_id
@@ -97,3 +102,32 @@ class CompositeAuditAdapter(AuditAdapter):
         # Healthy if all sub-adapters are healthy
         results = await asyncio.gather(*[adapter.health_check() for adapter in self._adapters])
         return all(results)
+
+    async def get_stats(self) -> dict[str, Any]:
+        """Aggregate stats from the first adapter that supports it."""
+        for adapter in self._adapters:
+            try:
+                return await adapter.get_stats()
+            except NotImplementedError:
+                continue
+        return {}
+
+    async def delete_events(self, query: AuditQuery) -> int:
+        results = await asyncio.gather(*[adapter.delete_events(query) for adapter in self._adapters], return_exceptions=True)
+        return sum(r for r in results if isinstance(r, int))
+
+    async def export_events(self, **kwargs) -> str:
+        for adapter in self._adapters:
+            try:
+                return await adapter.export_events(**kwargs)
+            except NotImplementedError:
+                continue
+        raise NotImplementedError("None of the adapters support exporting events")
+
+    async def archive_events(self, **kwargs) -> str:
+        for adapter in self._adapters:
+            try:
+                return await adapter.archive_events(**kwargs)
+            except NotImplementedError:
+                continue
+        raise NotImplementedError("None of the adapters support archiving events")

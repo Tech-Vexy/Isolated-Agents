@@ -29,13 +29,13 @@ def my_agent():
 def example_basic():
     """Basic usage without adapter configuration (uses defaults)."""
     print("Example 1: Basic usage (backward compatible)")
-    
+
     result = run_agent(
         agent=my_agent,
         working_dir="./workspace",
         policy=Policy(timeout_seconds=30),
     )
-    
+
     print(f"Exit code: {result.exit_code}")
     print(f"Artifacts: {list(result.artifacts.keys())}")
     print()
@@ -48,7 +48,7 @@ def example_basic():
 def example_global_config():
     """Configure adapters globally for all subsequent runs."""
     print("Example 2: Global adapter configuration")
-    
+
     # Configure adapters once at application startup
     configure_adapters(config={
         "container": {
@@ -73,13 +73,13 @@ def example_global_config():
             "type": "default"
         }
     })
-    
+
     # All subsequent runs use the configured adapters
     result = run_agent(
         agent=my_agent,
         working_dir="./workspace",
     )
-    
+
     print(f"Exit code: {result.exit_code}")
     print()
 
@@ -91,7 +91,7 @@ def example_global_config():
 def example_per_run_config():
     """Configure adapters for a specific run only."""
     print("Example 3: Per-run adapter configuration")
-    
+
     # This configuration applies only to this specific run
     result = run_agent(
         agent=my_agent,
@@ -101,7 +101,7 @@ def example_per_run_config():
             "storage": {"type": "local"},
         }
     )
-    
+
     print(f"Exit code: {result.exit_code}")
     print()
 
@@ -113,15 +113,15 @@ def example_per_run_config():
 def example_config_from_file():
     """Load adapter configuration from a YAML or JSON file."""
     print("Example 4: Configuration from file")
-    
+
     # Load configuration from YAML file
     configure_adapters(config_file="./config.yaml")
-    
+
     result = run_agent(
         agent=my_agent,
         working_dir="./workspace",
     )
-    
+
     print(f"Exit code: {result.exit_code}")
     print()
 
@@ -133,20 +133,20 @@ def example_config_from_file():
 def example_config_from_env():
     """Load adapter configuration from environment variables."""
     print("Example 5: Configuration from environment")
-    
+
     # Set environment variables:
     # ISOLATED_AGENTS_CONTAINER_TYPE=podman
     # ISOLATED_AGENTS_STORAGE_TYPE=local
     # ISOLATED_AGENTS_AUDIT_TYPE=file
     # ISOLATED_AGENTS_POLICY_TYPE=default
-    
+
     configure_adapters(from_env=True)
-    
+
     result = run_agent(
         agent=my_agent,
         working_dir="./workspace",
     )
-    
+
     print(f"Exit code: {result.exit_code}")
     print()
 
@@ -158,7 +158,7 @@ def example_config_from_env():
 async def example_async_with_adapters():
     """Use async API with adapter configuration."""
     print("Example 6: Async API with adapters")
-    
+
     # Configure adapters for async execution
     result = await async_run_agent(
         agent=my_agent,
@@ -168,7 +168,7 @@ async def example_async_with_adapters():
             "storage": {"type": "local"},
         }
     )
-    
+
     print(f"Exit code: {result.exit_code}")
     print()
 
@@ -180,24 +180,24 @@ async def example_async_with_adapters():
 def example_registry_access():
     """Access the adapter registry for advanced use cases."""
     print("Example 7: Accessing adapter registry")
-    
+
     # Get the global registry
     registry = get_adapter_registry()
-    
+
     if registry:
         # Access individual adapters
         container_adapter = registry.get_container_adapter()
         storage_adapter = registry.get_storage_adapter()
         audit_adapter = registry.get_audit_adapter()
         policy_adapter = registry.get_policy_adapter()
-        
+
         print(f"Container adapter: {type(container_adapter).__name__}")
         print(f"Storage adapter: {type(storage_adapter).__name__}")
         print(f"Audit adapter: {type(audit_adapter).__name__}")
         print(f"Policy adapter: {type(policy_adapter).__name__}")
     else:
         print("Adapter support not available")
-    
+
     print()
 
 
@@ -208,14 +208,14 @@ def example_registry_access():
 def example_mixed_usage():
     """Mix old and new API styles (fully backward compatible)."""
     print("Example 8: Mixed usage")
-    
+
     # Old style - still works perfectly
     result1 = run_agent(
         agent=my_agent,
         working_dir="./workspace",
     )
     print(f"Old style exit code: {result1.exit_code}")
-    
+
     # New style - with adapter configuration
     result2 = run_agent(
         agent=my_agent,
@@ -223,7 +223,7 @@ def example_mixed_usage():
         adapter_config={"container": {"type": "podman"}}
     )
     print(f"New style exit code: {result2.exit_code}")
-    
+
     print()
 
 
@@ -234,7 +234,7 @@ def example_mixed_usage():
 def example_error_handling():
     """Handle errors when adapter support is not available."""
     print("Example 9: Error handling")
-    
+
     try:
         configure_adapters(config={
             "container": {"type": "podman"}
@@ -243,14 +243,14 @@ def example_error_handling():
     except ImportError as e:
         print(f"Adapter support not available: {e}")
         print("Falling back to default behavior")
-        
+
         # Still works with default implementations
         result = run_agent(
             agent=my_agent,
             working_dir="./workspace",
         )
         print(f"Exit code: {result.exit_code}")
-    
+
     print()
 
 
@@ -261,7 +261,7 @@ def example_error_handling():
 def example_production_pattern():
     """Recommended pattern for production deployments."""
     print("Example 10: Production deployment pattern")
-    
+
     # 1. Configure adapters once at application startup
     try:
         # Try to load from environment (12-factor app pattern)
@@ -275,7 +275,7 @@ def example_production_pattern():
         except (ImportError, FileNotFoundError):
             # Fall back to defaults
             print("Using default configuration")
-    
+
     # 2. Run agents normally - configuration is already set
     result = run_agent(
         agent=my_agent,
@@ -286,7 +286,7 @@ def example_production_pattern():
             timeout_seconds=300,
         ),
     )
-    
+
     print(f"Exit code: {result.exit_code}")
     print()
 
@@ -301,11 +301,11 @@ def main():
     print("Adapter-Aware Public API Examples")
     print("=" * 70)
     print()
-    
+
     # Note: These examples assume workspace directory exists
     workspace = Path("./workspace")
     workspace.mkdir(exist_ok=True)
-    
+
     # Run synchronous examples
     example_basic()
     # example_global_config()  # Uncomment to test
@@ -316,11 +316,11 @@ def main():
     example_mixed_usage()
     example_error_handling()
     example_production_pattern()
-    
+
     # Run async example
     print("Running async example...")
     asyncio.run(example_async_with_adapters())
-    
+
     print("=" * 70)
     print("All examples completed!")
     print("=" * 70)

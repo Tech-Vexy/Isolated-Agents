@@ -136,6 +136,8 @@ class Policy(BaseModel):
     def _validate_cpu_cores(cls, v: Any) -> float:
         if isinstance(v, bool):
             raise ValueError("cpu_cores cannot be a boolean")
+        if not isinstance(v, (int, float)):
+            raise ValueError("cpu_cores must be a real number")
         return float(v)
 
     @field_validator("memory_mb", "timeout_seconds", "max_output_bytes", 
@@ -148,6 +150,8 @@ class Policy(BaseModel):
             return None
         if isinstance(v, bool):
             raise ValueError("Expected integer, got boolean")
+        if not isinstance(v, int):
+            raise ValueError("Expected integer")
         return int(v)
 
     def _to_dict(self) -> Dict[str, Any]:
@@ -166,7 +170,7 @@ class Policy(BaseModel):
             field_name = None
             expected_type = None
             if isinstance(e, ValidationError):
-                error = e.errors()[0]
+                error = e.errors()[0]  # pylint: disable=no-member
                 field_name = str(error['loc'][0]) if error['loc'] else None
                 expected_type = error['type'] # e.g. 'extra_forbidden', 'int_parsing'
             raise PolicyValidationError(str(e), field_name=field_name, expected_type=expected_type)
@@ -184,9 +188,9 @@ class Policy(BaseModel):
             raw = json.loads(data)
             if isinstance(raw.get("timeout_seconds"), float) and not raw.get("timeout_seconds").is_integer():
                 raise PolicyValidationError("timeout_seconds must be an integer", field_name="timeout_seconds", expected_type="int")
-            if "network" in raw and "disabled" in raw["network"] and not isinstance(raw["network"]["disabled"], bool):
+            if "network" in raw and isinstance(raw["network"], dict) and "disabled" in raw["network"] and not isinstance(raw["network"]["disabled"], bool):
                 raise PolicyValidationError("network.disabled must be a boolean", field_name="disabled", expected_type="bool")
-            return cls.model_validate(raw)
+            return cls.model_validate(raw, strict=True)
         except json.JSONDecodeError as e:
             raise PolicyValidationError(str(e))
         except PolicyValidationError:
@@ -197,7 +201,7 @@ class Policy(BaseModel):
             field_name = None
             expected_type = None
             if isinstance(e, ValidationError):
-                error = e.errors()[0]
+                error = e.errors()[0]  # pylint: disable=no-member
                 field_name = str(error['loc'][0]) if error['loc'] else None
                 expected_type = error['type']
                 # Map internal types to user-friendly strings for legacy tests
@@ -278,8 +282,8 @@ class SubAgentPolicy(BaseModel):
     max_output_bytes: Optional[int] = None
     timeout_seconds: Optional[int] = None
     log_output_path: Optional[str] = None
-    max_sub_agent_depth: int = 3
-    max_sub_agents: int = 10
+    max_sub_agent_depth: int = Field(default=3, gt=0, strict=True)
+    max_sub_agents: int = Field(default=10, gt=0, strict=True)
 
     def _to_dict(self) -> Dict[str, Any]:
         return self.model_dump()

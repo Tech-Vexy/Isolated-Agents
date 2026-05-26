@@ -59,6 +59,7 @@ async def test_policy_to_adapter_mapping(policy: Policy) -> None:
     mock_adapter = AsyncMock()
     mock_adapter.initialize = AsyncMock()
     mock_adapter.provision_container = AsyncMock(return_value=MagicMock(container_id="cid", image="img"))
+    mock_adapter.get_adapter_name = MagicMock(return_value="mock")
     
     import tempfile
     from isolated_agents_sdk.container_provisioner import ContainerProvisioner
@@ -89,11 +90,11 @@ async def test_policy_to_adapter_mapping(policy: Policy) -> None:
     security = kwargs.get("security")
     assert isinstance(security, SecurityConfig)
     # Default security settings
-    assert security.privileged is False
+    assert security.read_only_rootfs is True
     
     mounts = kwargs.get("mounts")
     # Should include working dir and readonly mounts
-    mount_paths = [m.host_path for m in mounts]
+    mount_paths = [m.source for m in mounts]
     assert str(working_dir) in mount_paths
     for rm in policy.readonly_mounts:
         assert str(rm) in mount_paths

@@ -51,6 +51,9 @@ class AgentRuntime:
     ):
         self.working_dir = Path(working_dir)
         self.runtime_id = runtime_id or str(uuid.uuid4())[:8]
+        self._spawn_socket_path: Optional[str] = None
+        self._spawn_server = None
+        self._hitl_handler: Optional[Callable[[str, str, int], Awaitable[str]]] = None
         
         # If audit logging is disabled (e.g. for clean CLI output),
         # we pass a Null handler if we eventually implement that,
@@ -238,6 +241,8 @@ class AgentRuntime:
                 response = await self._handle_db_nosql(request, "set", session_id)
             elif command == "db_vector_search":
                 response = await self._handle_db_vector(request, session_id)
+            elif command == "hitl_request":
+                response = await self._handle_hitl_request(request, session_id)
 
             # 3. Send length-prefixed response
             encoded_response = json.dumps(response).encode()
@@ -518,6 +523,14 @@ class AgentRuntime:
     def spawn_socket_path(self) -> Optional[str]:
         return self._spawn_socket_path
 
+    def register_hitl_handler(self, handler: Callable[[str, str, int], Awaitable[str]]) -> None:
+        """Register a handler for Human-in-the-Loop (HITL) requests.
+        
+        Args:
+            handler: An async function that takes (session_id, prompt, timeout) and returns a human input string.
+        """
+        self._hitl_handler = handler
+
     def list_sessions(self) -> List[SessionInfo]:
         """List all active agent sessions in this runtime."""
         return self.session_manager.list_sessions()
@@ -525,7 +538,8 @@ class AgentRuntime:
     async def cancel_session(self, session_id: str) -> bool:
         """Cancel a running agent session."""
         logger.warning(f"Request to cancel session {session_id}")
-        return self.session_manager.destroy_session(session_id)
+        await self.session_manager.complete_session(session_id, exit_code=1, error="Cancelled by runtime.")
+        return True
 
     def get_status(self) -> Dict[str, Any]:
         """Get the current operational status of the runtime."""

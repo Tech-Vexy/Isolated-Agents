@@ -14,11 +14,11 @@ Usage:
     # Terminal 1 - Start worker 1
     export RABBITMQ_HOST=localhost
     python examples/distributed/rabbitmq_work_queue.py worker
-    
+
     # Terminal 2 - Start worker 2
     export RABBITMQ_HOST=localhost
     python examples/distributed/rabbitmq_work_queue.py worker
-    
+
     # Terminal 3 - Start producer
     export RABBITMQ_HOST=localhost
     python examples/distributed/rabbitmq_work_queue.py producer
@@ -35,13 +35,13 @@ def producer_agent():
     import json
     import time
     from pathlib import Path
-    
+
     print("🚀 Producer Agent Starting...")
-    
+
     # Connect to RabbitMQ
     rabbitmq_host = os.environ.get("RABBITMQ_HOST", "localhost")
     rabbitmq_port = int(os.environ.get("RABBITMQ_PORT", "5672"))
-    
+
     try:
         connection = pika.BlockingConnection(
             pika.ConnectionParameters(host=rabbitmq_host, port=rabbitmq_port)
@@ -51,19 +51,19 @@ def producer_agent():
     except Exception as e:
         print(f"✗ Failed to connect to RabbitMQ: {e}")
         return
-    
+
     # Declare durable queue
     queue_name = "task_queue"
     channel.queue_declare(queue=queue_name, durable=True)
-    
+
     output_dir = Path("/output")
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     print(f"\n📤 Sending tasks to queue: {queue_name}")
     print("=" * 60)
-    
+
     tasks_sent = 0
-    
+
     # Send tasks
     for i in range(20):
         task = {
@@ -74,7 +74,7 @@ def producer_agent():
             "complexity": i % 5,  # 0-4 complexity levels
             "timestamp": time.time()
         }
-        
+
         # Publish with persistence
         channel.basic_publish(
             exchange='',
@@ -85,16 +85,16 @@ def producer_agent():
             )
         )
         tasks_sent += 1
-        
+
         print(f"✓ Task {i:2d} sent | Complexity: {task['complexity']} | Data: {task['data']}")
-        
+
         time.sleep(0.5)
-    
+
     print("=" * 60)
     print(f"✓ Sent {tasks_sent} tasks")
-    
+
     connection.close()
-    
+
     # Save summary
     summary = f"""Producer Agent Summary
 =====================
@@ -104,7 +104,7 @@ RabbitMQ Server: {rabbitmq_host}:{rabbitmq_port}
 Status: Completed
 """
     (output_dir / "producer_summary.txt").write_text(summary)
-    print(f"\n✓ Summary saved to /output/producer_summary.txt")
+    print("\n✓ Summary saved to /output/producer_summary.txt")
 
 
 def worker_agent():
@@ -116,13 +116,13 @@ def worker_agent():
     import signal
     import sys
     import random
-    
+
     print("🚀 Worker Agent Starting...")
-    
+
     # Connect to RabbitMQ
     rabbitmq_host = os.environ.get("RABBITMQ_HOST", "localhost")
     rabbitmq_port = int(os.environ.get("RABBITMQ_PORT", "5672"))
-    
+
     try:
         connection = pika.BlockingConnection(
             pika.ConnectionParameters(host=rabbitmq_host, port=rabbitmq_port)
@@ -132,51 +132,51 @@ def worker_agent():
     except Exception as e:
         print(f"✗ Failed to connect to RabbitMQ: {e}")
         return
-    
+
     # Declare durable queue
     queue_name = "task_queue"
     channel.queue_declare(queue=queue_name, durable=True)
-    
+
     # Fair dispatch - don't give more than one message to a worker at a time
     channel.basic_qos(prefetch_count=1)
-    
+
     output_dir = Path("/output")
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     worker_id = random.randint(1000, 9999)
-    
+
     print(f"\n📥 Worker {worker_id} waiting for tasks from queue: {queue_name}")
     print("=" * 60)
-    
+
     tasks_processed = 0
     results = []
-    
+
     # Handle graceful shutdown
     shutdown_requested = False
-    
+
     def signal_handler(signum, frame):
         nonlocal shutdown_requested
         shutdown_requested = True
         print(f"\n⚠ Worker {worker_id} shutdown requested...")
-    
+
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    
+
     def callback(ch, method, properties, body):
         nonlocal tasks_processed, shutdown_requested
-        
+
         if shutdown_requested:
             ch.stop_consuming()
             return
-        
+
         task = json.loads(body)
-        
+
         print(f"✓ Task {task['id']:2d} received | Complexity: {task['complexity']} | Processing...")
-        
+
         # Simulate processing time based on complexity
         processing_time = task['complexity'] * 0.5
         time.sleep(processing_time)
-        
+
         # Process task
         result = {
             "task_id": task['id'],
@@ -188,38 +188,38 @@ def worker_agent():
         }
         results.append(result)
         tasks_processed += 1
-        
+
         print(f"  ✓ Task {task['id']:2d} completed in {processing_time:.1f}s")
-        
+
         # Acknowledge task
         ch.basic_ack(delivery_tag=method.delivery_tag)
-        
+
         # Stop after processing 10 tasks
         if tasks_processed >= 10:
             print(f"\n✓ Worker {worker_id} processed target number of tasks, stopping...")
             ch.stop_consuming()
-    
+
     # Start consuming
     channel.basic_consume(queue=queue_name, on_message_callback=callback)
-    
+
     try:
         channel.start_consuming()
     except KeyboardInterrupt:
         print(f"\n⚠ Worker {worker_id} interrupted by user")
         channel.stop_consuming()
-    
+
     connection.close()
-    
+
     print("=" * 60)
     print(f"✓ Worker {worker_id} processed {tasks_processed} tasks")
-    
+
     # Save results
     results_text = "\n".join([
         f"Task {r['task_id']}: {r['data']} - {r['status']} in {r['processing_time']:.1f}s"
         for r in results
     ])
     (output_dir / f"worker_{worker_id}_results.txt").write_text(results_text)
-    
+
     summary = f"""Worker Agent Summary
 ===================
 Worker ID: {worker_id}
@@ -229,42 +229,42 @@ RabbitMQ Server: {rabbitmq_host}:{rabbitmq_port}
 Status: Completed
 """
     (output_dir / f"worker_{worker_id}_summary.txt").write_text(summary)
-    
+
     print(f"\n✓ Results saved to /output/worker_{worker_id}_results.txt")
     print(f"✓ Summary saved to /output/worker_{worker_id}_summary.txt")
 
 
 if __name__ == "__main__":
     from isolated_agents_sdk import run_agent, Policy, NetworkPolicy
-    
+
     if len(sys.argv) < 2:
         print("Usage: python rabbitmq_work_queue.py [producer|worker]")
         sys.exit(1)
-    
+
     mode = sys.argv[1].lower()
-    
+
     if mode not in ["producer", "worker"]:
         print("Error: Mode must be 'producer' or 'worker'")
         sys.exit(1)
-    
+
     # Check RabbitMQ connection
     rabbitmq_host = os.environ.get("RABBITMQ_HOST", "localhost")
     rabbitmq_port = os.environ.get("RABBITMQ_PORT", "5672")
-    
+
     print(f"\n{'='*60}")
-    print(f"RabbitMQ Work Queue Agent Communication Example")
+    print("RabbitMQ Work Queue Agent Communication Example")
     print(f"{'='*60}")
     print(f"Mode: {mode.upper()}")
     print(f"RabbitMQ: {rabbitmq_host}:{rabbitmq_port}")
     print(f"{'='*60}\n")
-    
+
     # Select agent
     agent_func = producer_agent if mode == "producer" else worker_agent
-    
+
     # Create output directory
     output = Path(f"./output/{mode}")
     output.mkdir(parents=True, exist_ok=True)
-    
+
     # Run agent in isolated container
     result = run_agent(
         agent=agent_func,
@@ -280,21 +280,21 @@ if __name__ == "__main__":
             timeout_seconds=180 if mode == "worker" else 60,
         )
     )
-    
+
     print(f"\n{'='*60}")
     print(f"{mode.upper()} Agent completed with exit code: {result.exit_code}")
     print(f"{'='*60}")
-    
+
     if result.artifacts:
-        print(f"\nOutput artifacts:")
+        print("\nOutput artifacts:")
         for name, path in result.artifacts.items():
             size = Path(path).stat().st_size
             print(f"  • {name} ({size:,} bytes)")
-            
+
             # Display summary
             if "summary" in name:
                 print(f"\n{Path(path).read_text()}")
-    
+
     sys.exit(result.exit_code)
 
 # Made with Bob

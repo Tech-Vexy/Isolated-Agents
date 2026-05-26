@@ -11,7 +11,7 @@ def child_agent(message: str):
 def parent_agent():
     """Agent that spawns a sub-agent."""
     print("Parent agent starting...")
-    
+
     # In a real scenario, this would trigger the Spawn Daemon IPC
     # which in turn calls run_agent on the host.
     try:
@@ -35,10 +35,10 @@ if __name__ == "__main__":
         allow_sub_agents=True,
         pip_packages=["cloudpickle"]
     )
-    
+
     print("Running parent agent...")
     result = run_agent(parent_agent, policy=policy)
-    
+
     print("\nFinal Result:")
     print(result.output)
     if result.artifacts:

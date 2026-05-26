@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from hypothesis import given, settings, strategies as st
 
-from isolated_agents_sdk.models import AgentResult
+from isolated_agents_sdk.models import AgentResult, Policy
 from isolated_agents_sdk.output_collector import OutputCollector
 
 
@@ -71,7 +71,27 @@ async def test_agent_result_contains_exit_code_and_artifacts(
     """AgentResult SHALL contain the exit code and a mapping of all collected artifacts."""
     mock_audit_logger = MagicMock()
     mock_container_adapter = AsyncMock()
-    mock_container_adapter.exec_in_container = AsyncMock(return_value=(b"", b"", 0))
+    from isolated_agents_sdk.adapters.container.types import ExecResult
+    
+    async def fake_exec_in_container(cid, cmd, **kwargs):
+        if cmd[0] == "test":
+            return ExecResult(exit_code=0, stdout="", stderr="")
+        elif cmd[0] == "find":
+            stdout = "\n".join([f"/output/{k}" for k in output_files]) + "\n"
+            return ExecResult(exit_code=0, stdout=stdout, stderr="")
+        elif cmd[0] == "du":
+            total_size = sum(len(v) for v in output_files.values())
+            return ExecResult(exit_code=0, stdout=f"{total_size} /output\n", stderr="")
+        return ExecResult(exit_code=0, stdout="", stderr="")
+
+    mock_container_adapter.exec_in_container = AsyncMock(side_effect=fake_exec_in_container)
+
+    async def fake_copy_from_container(cid, src, dest, **kwargs):
+        # Create a mock file at the destination path
+        name = src.split("/")[-1]
+        Path(dest).write_bytes(output_files.get(name, b""))
+
+    mock_container_adapter.copy_from_container = AsyncMock(side_effect=fake_copy_from_container)
     
     mock_storage_adapter = AsyncMock()
     mock_storage_adapter.initialize = AsyncMock()
@@ -116,9 +136,8 @@ async def test_agent_result_contains_exit_code_and_artifacts(
             
             result = await collector.collect(
                 container_id="test-container-id",
-                output_path_in_container="/output",
+                policy=Policy(output_path_in_container="/output", max_output_bytes=None),
                 host_output_path=Path(host_output_dir),
-                max_output_bytes=None,
                 exit_code=exit_code,
                 session_id=session_id,
                 agent_id=agent_id,

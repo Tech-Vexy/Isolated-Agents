@@ -54,6 +54,8 @@ class TelemetryAuditAdapter(AuditAdapter):
         user_id: Optional[str] = None,
         severity: str = "info",
         tags: Optional[dict[str, str]] = None,
+        timestamp: Optional[str] = None,
+        raw_event_type: Optional[str] = None,
     ) -> str:
         if not self._initialized:
             return ""
@@ -159,3 +161,15 @@ class TelemetryAuditAdapter(AuditAdapter):
 
     async def get_stats(self) -> dict[str, Any]:
         return {}
+
+    async def delete_events(self, query: AuditQuery) -> int:
+        return 0
+
+    async def export_events(self, **kwargs) -> str:
+        return ""
+
+    async def archive_events(self, **kwargs) -> str:
+        return ""
+
+    async def health_check(self) -> bool:
+        return True

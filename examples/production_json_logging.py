@@ -20,9 +20,9 @@ def main():
         level=logging.DEBUG,
         structured=True
     )
-    
+
     logger = logging.getLogger("host-orchestration")
-    
+
     # Policy with specific log path
     policy = Policy(
         memory_mb=256,

@@ -119,7 +119,7 @@ class SubAgentClient:
         """Send a request to the Spawn Daemon using length-prefixed framing (v0.2.1)."""
         import struct
         try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:  # pylint: disable=no-member
                 sock.connect(self.socket_path)
                 
                 # 1. Encode payload

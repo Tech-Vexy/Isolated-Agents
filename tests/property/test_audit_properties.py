@@ -6,6 +6,7 @@ Feature: isolated-agents-sdk
 # Feature: isolated-agents-sdk, Property 10: Audit log entries contain all required fields
 # Feature: isolated-agents-sdk, Property 11: Audit logs are written to the correct destination
 
+import asyncio
 import io
 import json
 import os
@@ -86,7 +87,7 @@ def test_audit_log_required_fields_non_violation(
     buf = io.StringIO()
 
     with unittest.mock.patch.object(sys, "stderr", buf):
-        logger.log_event(event_type, session_id, agent_id, payload)
+        asyncio.run(logger.log_event(event_type, session_id, agent_id, payload))
 
     line = buf.getvalue().strip()
     assert line, "No output was emitted"
@@ -126,7 +127,7 @@ def test_audit_log_required_fields_violation(
     buf = io.StringIO()
 
     with unittest.mock.patch.object(sys, "stderr", buf):
-        logger.log_event(event_type, session_id, agent_id, payload)
+        asyncio.run(logger.log_event(event_type, session_id, agent_id, payload))
 
     line = buf.getvalue().strip()
     assert line, "No output was emitted"
@@ -175,7 +176,7 @@ def test_audit_log_destination_stderr_when_no_path(
     buf = io.StringIO()
 
     with unittest.mock.patch.object(sys, "stderr", buf):
-        logger.log_event(event_type, session_id, agent_id, payload)
+        asyncio.run(logger.log_event(event_type, session_id, agent_id, payload))
 
     assert buf.getvalue().strip(), "Expected a log entry on stderr but got nothing"
     entry = json.loads(buf.getvalue().strip())
@@ -208,7 +209,7 @@ def test_audit_log_destination_file_when_path_given(
         stderr_buf = io.StringIO()
 
         with unittest.mock.patch.object(sys, "stderr", stderr_buf):
-            logger.log_event(event_type, session_id, agent_id, payload)
+            asyncio.run(logger.log_event(event_type, session_id, agent_id, payload))
 
         # Nothing should have been written to stderr
         assert stderr_buf.getvalue() == "", (

@@ -59,6 +59,10 @@ packages = ["isolated_agents_sdk"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: requires a real container runtime (podman/docker). Deselect with -m 'not integration'.",
+    "slow: tests that take more than a few seconds.",
+]
 
 [dependency-groups]
 dev = [

@@ -20,11 +20,11 @@ def disk_check_agent():
 
 async def main():
     setup_logging(level=logging.INFO)
-    
+
     # Initialize the scheduler (v0.2.1: results are stored in a rolling buffer)
     scheduler = AgentScheduler(run_agent_coro=async_run_agent)
     await scheduler.start()
-    
+
     # 1. Schedule a task to run every 5 seconds
     # v0.2.1 fix ensures that even if this runs 1 million times, only the last 10 outcomes are in RAM.
     scheduler.schedule_interval(
@@ -33,9 +33,9 @@ async def main():
         working_dir="./scheduler_workspace",
         policy=Policy(memory_mb=128)
     )
-    
+
     print("--- Scheduler active (Memory Leak Protection Enabled) ---")
-    
+
     try:
         # Monitor the rolling buffer for a few cycles
         for _ in range(3):

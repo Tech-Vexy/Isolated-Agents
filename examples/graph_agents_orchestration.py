@@ -5,8 +5,8 @@ Uses StateGraph to manage nodes, edges, and conditional transitions.
 
 import asyncio
 from isolated_agents_sdk import (
-    isolated_agent, 
-    StateGraph, 
+    isolated_agent,
+    StateGraph,
     setup_logging,
     Policy,
     NetworkPolicy
@@ -28,7 +28,7 @@ def writer(state: dict):
 def quality_checker(state: dict):
     article = state.get("article", "")
     print(f"[Node: Quality Checker] Checking article length: {len(article)}")
-    
+
     # Simple logic: if article is too short, mark for revision
     is_good = len(article) > 50
     return {"is_approved": is_good, "revision_needed": not is_good}
@@ -42,19 +42,19 @@ def router(state: dict):
 
 async def main():
     setup_logging()
-    
+
     # 3. Build the StateGraph
     workflow = StateGraph()
-    
+
     # Add Nodes
     workflow.add_node("research", researcher)
     workflow.add_node("write", writer)
     workflow.add_node("check", quality_checker)
-    
+
     # Define Edges (Transitions)
     workflow.add_edge("research", "write")
     workflow.add_edge("write", "check")
-    
+
     # Define Conditional Edge (Routing)
     workflow.add_conditional_edges(
         "check",
@@ -64,15 +64,15 @@ async def main():
             "revise": "write"  # Loop back if not approved
         }
     )
-    
+
     workflow.set_entry_point("research")
-    
+
     # 4. Compile and Run
     print("--- Starting Graph Agent Orchestration ---")
     app = workflow.compile()
-    
+
     final_state = await app(initial_state={"topic": "Graph-based Agents"})
-    
+
     print("\n--- Final Workflow State ---")
     print(f"Topic: {final_state.get('topic')}")
     print(f"Approved: {final_state.get('is_approved')}")
@@ -80,4 +80,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-吐
+

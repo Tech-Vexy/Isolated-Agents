@@ -27,7 +27,7 @@ def fast_api_style_server():
 
 def main():
     setup_logging(level=logging.INFO)
-    
+
     # Define policy with Ingress support (Port Mapping)
     # We map container port 8080 to host port 8080
     policy = Policy(
@@ -41,7 +41,7 @@ def main():
     print("--- Launching Isolated Server Agent ---")
     print("This agent will run a web server inside a container.")
     print("You will be able to reach it at http://localhost:8080 while it's running.")
-    
+
     try:
         # Note: This will block as the server logic is 'serve_forever'
         run_agent(
