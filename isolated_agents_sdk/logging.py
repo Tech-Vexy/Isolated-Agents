@@ -10,6 +10,7 @@ from __future__ import annotations
 import fnmatch
 import logging
 import sys
+from datetime import UTC
 from typing import Any, List, Optional
 
 from loguru import logger as _loguru_logger
@@ -18,8 +19,12 @@ from loguru import logger as _loguru_logger
 # Sensitive-value masking
 # ---------------------------------------------------------------------------
 
-_SENSITIVE_PATTERNS: List[str] = [
-    "*PASSWORD*", "*SECRET*", "*TOKEN*", "*KEY*", "*CREDENTIALS*",
+_SENSITIVE_PATTERNS: list[str] = [
+    "*PASSWORD*",
+    "*SECRET*",
+    "*TOKEN*",
+    "*KEY*",
+    "*CREDENTIALS*",
 ]
 
 
@@ -36,7 +41,7 @@ def _mask_value(key: str, value: Any) -> Any:
     return value
 
 
-def add_global_sensitive_patterns(patterns: List[str]) -> None:
+def add_global_sensitive_patterns(patterns: list[str]) -> None:
     """Register additional sensitive key patterns for log masking."""
     for p in patterns:
         if p not in _SENSITIVE_PATTERNS:
@@ -46,6 +51,7 @@ def add_global_sensitive_patterns(patterns: List[str]) -> None:
 # ---------------------------------------------------------------------------
 # Stdlib → loguru bridge
 # ---------------------------------------------------------------------------
+
 
 class _InterceptHandler(logging.Handler):
     """Forward every stdlib logging record into loguru."""
@@ -63,19 +69,18 @@ class _InterceptHandler(logging.Handler):
             frame = frame.f_back  # type: ignore[assignment]
             depth += 1
 
-        _loguru_logger.opt(depth=depth, exception=record.exc_info).log(
-            level, record.getMessage()
-        )
+        _loguru_logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def setup_logging(
     level: int = logging.INFO,
     use_colors: bool = True,
-    log_file: Optional[str] = None,
+    log_file: str | None = None,
     structured: bool = False,
 ) -> None:
     """Configure loguru for the SDK.
@@ -143,6 +148,7 @@ def get_logger(name: str) -> logging.Logger:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _sensitive_filter(record: dict) -> bool:  # type: ignore[type-arg]
     """Mask sensitive values in the loguru record's extra dict in-place."""
     for key in list(record.get("extra", {}).keys()):
@@ -155,15 +161,14 @@ def _json_formatter(record: dict) -> str:  # type: ignore[type-arg]
     import json
     from datetime import timezone
 
-    ts = record["time"].astimezone(timezone.utc).isoformat()
+    ts = record["time"].astimezone(UTC).isoformat()
     entry: dict[str, Any] = {
         "timestamp": ts,
         "level": record["level"].name,
         "logger": record["name"],
         "message": record["message"],
     }
-    extra = {k: _mask_value(k, v) for k, v in record.get("extra", {}).items()
-             if k != "sdk_name"}
+    extra = {k: _mask_value(k, v) for k, v in record.get("extra", {}).items() if k != "sdk_name"}
     if extra:
         entry["extra"] = extra
     if record["exception"]:

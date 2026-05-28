@@ -3,10 +3,10 @@
 Feature: isolated-agents-sdk
 """
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from isolated_agents_sdk.models import NetworkPolicy, Policy
-
 
 # ---------------------------------------------------------------------------
 # Strategies
@@ -17,7 +17,9 @@ network_policy_strategy = st.builds(
     disabled=st.booleans(),
     allowed_endpoints=st.lists(
         st.text(
-            alphabet=st.characters(whitelist_categories=("Lu", "Ll", "Nd"), whitelist_characters=".-:/"),
+            alphabet=st.characters(
+                whitelist_categories=("Lu", "Ll", "Nd"), whitelist_characters=".-:/"
+            ),
             min_size=1,
             max_size=50,
         ),
@@ -33,7 +35,7 @@ policy_strategy = st.builds(
     readonly_mounts=st.lists(st.text(min_size=1, max_size=100), max_size=5),
     allowed_env_vars=st.lists(st.text(min_size=1, max_size=50), max_size=10),
     output_path_in_container=st.text(min_size=1, max_size=200),
-    max_output_bytes=st.one_of(st.none(), st.integers(min_value=1, max_value=10 ** 9)),
+    max_output_bytes=st.one_of(st.none(), st.integers(min_value=1, max_value=10**9)),
     timeout_seconds=st.one_of(st.none(), st.integers(min_value=1, max_value=86400)),
     log_output_path=st.one_of(st.none(), st.text(min_size=1, max_size=200)),
 )
@@ -42,6 +44,7 @@ policy_strategy = st.builds(
 # ---------------------------------------------------------------------------
 # Property 14: Policy serialization round-trip
 # ---------------------------------------------------------------------------
+
 
 # Feature: isolated-agents-sdk, Property 14: Policy serialization round-trip
 @given(policy_strategy)
@@ -73,13 +76,37 @@ def test_policy_round_trip(policy: Policy) -> None:
 # Known top-level Policy field names — extra keys must not collide with these.
 # This set must stay in sync with _POLICY_FIELD_TYPES in models.py.
 _KNOWN_POLICY_FIELDS = frozenset(
-    {"cpu_cores", "memory_mb", "network", "readonly_mounts", "allowed_env_vars",
-     "pip_packages", "output_path_in_container", "max_output_bytes", "timeout_seconds",
-     "log_output_path", "entrypoint", "base_image", "requires_display", "tmpfs_secrets",
-     "proxy_url", "proxy_ca_cert", "enable_session_replay", "cap_drop", "cap_add",
-     "seccomp_profile", "read_only_rootfs", "resource_monitor_interval",
-     "cpu_threshold_percent", "memory_threshold_percent", "container_user",
-     "pip_index_url", "pip_require_hashes", "max_sub_agent_depth", "max_sub_agents"}
+    {
+        "cpu_cores",
+        "memory_mb",
+        "network",
+        "readonly_mounts",
+        "allowed_env_vars",
+        "pip_packages",
+        "output_path_in_container",
+        "max_output_bytes",
+        "timeout_seconds",
+        "log_output_path",
+        "entrypoint",
+        "base_image",
+        "requires_display",
+        "tmpfs_secrets",
+        "proxy_url",
+        "proxy_ca_cert",
+        "enable_session_replay",
+        "cap_drop",
+        "cap_add",
+        "seccomp_profile",
+        "read_only_rootfs",
+        "resource_monitor_interval",
+        "cpu_threshold_percent",
+        "memory_threshold_percent",
+        "container_user",
+        "pip_index_url",
+        "pip_require_hashes",
+        "max_sub_agent_depth",
+        "max_sub_agents",
+    }
 )
 
 # Strategy: text keys that are not existing Policy fields
@@ -97,13 +124,16 @@ unknown_key_strategy = st.text(
     extra_value=st.one_of(st.integers(), st.text(), st.booleans(), st.none()),
 )
 @settings(max_examples=100)
-def test_unknown_policy_fields_rejected(policy: Policy, extra_key: str, extra_value: object) -> None:
+def test_unknown_policy_fields_rejected(
+    policy: Policy, extra_key: str, extra_value: object
+) -> None:
     """For any valid Policy JSON with at least one unknown top-level field,
     ``Policy.from_json()`` SHALL raise ``PolicyValidationError``.
 
     Validates: Requirements 10.5
     """
     import json
+
     from isolated_agents_sdk.exceptions import PolicyValidationError
 
     raw: dict = json.loads(policy.to_json())
@@ -147,7 +177,9 @@ _wrong_type_strategies: dict[str, st.SearchStrategy] = {
     ),
     "memory_mb": st.one_of(
         st.text(min_size=1),
-        st.floats(allow_nan=False, allow_infinity=False).filter(lambda x: x != int(x) if not (x != x) else True),
+        st.floats(allow_nan=False, allow_infinity=False).filter(
+            lambda x: x != int(x) if x == x else True
+        ),
         st.lists(st.integers()),
         st.fixed_dictionaries({}),
         st.booleans(),
@@ -178,14 +210,18 @@ _wrong_type_strategies: dict[str, st.SearchStrategy] = {
     ),
     "max_output_bytes": st.one_of(
         st.text(min_size=1),
-        st.floats(allow_nan=False, allow_infinity=False).filter(lambda x: x != int(x) if not (x != x) else True),
+        st.floats(allow_nan=False, allow_infinity=False).filter(
+            lambda x: x != int(x) if x == x else True
+        ),
         st.lists(st.integers()),
         st.fixed_dictionaries({}),
         st.booleans(),
     ),
     "timeout_seconds": st.one_of(
         st.text(min_size=1),
-        st.floats(allow_nan=False, allow_infinity=False).filter(lambda x: x != int(x) if not (x != x) else True),
+        st.floats(allow_nan=False, allow_infinity=False).filter(
+            lambda x: x != int(x) if x == x else True
+        ),
         st.lists(st.integers()),
         st.fixed_dictionaries({}),
         st.booleans(),
@@ -208,7 +244,9 @@ _field_name_strategy = st.sampled_from(sorted(_wrong_type_strategies.keys()))
     data=st.data(),
 )
 @settings(max_examples=100)
-def test_invalid_policy_field_types_rejected(policy: Policy, field_name: str, data: st.DataObject) -> None:
+def test_invalid_policy_field_types_rejected(
+    policy: Policy, field_name: str, data: st.DataObject
+) -> None:
     """For any valid Policy JSON where a known field is set to a wrong type,
     ``Policy.from_json()`` SHALL raise ``PolicyValidationError`` that identifies
     the offending field name.

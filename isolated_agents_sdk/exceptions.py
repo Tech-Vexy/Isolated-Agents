@@ -1,21 +1,22 @@
 """Custom exception classes for the Isolated Agents SDK."""
 
 from __future__ import annotations
+
 from typing import Optional
 
 
 class IsolatedAgentsError(Exception):
     """Base exception for all Isolated Agents SDK errors.
-    
+
     Attributes:
         message: The error message
         suggestion: Optional suggestion for how to fix the error
     """
-    
-    def __init__(self, message: str, suggestion: Optional[str] = None):
+
+    def __init__(self, message: str, suggestion: str | None = None):
         super().__init__(message)
         self.suggestion = suggestion
-    
+
     def __str__(self) -> str:
         msg = super().__str__()
         if self.suggestion:
@@ -25,7 +26,7 @@ class IsolatedAgentsError(Exception):
 
 class PodmanNotFoundError(IsolatedAgentsError):
     """Raised when Podman is not installed or not accessible on PATH."""
-    
+
     def __init__(self, message: str = "Container runtime not found"):
         suggestion = (
             "Install Podman or Docker:\n"
@@ -64,7 +65,7 @@ class PolicyValidationError(IsolatedAgentsError):
                 f"The field '{field_name}' is not recognized. "
                 f"Check for typos or refer to the Policy documentation."
             )
-        
+
         super().__init__(message, suggestion=suggestion)
         self.field_name = field_name
         self.expected_type = expected_type
@@ -75,7 +76,7 @@ class SpawnContextError(IsolatedAgentsError):
     session context (i.e. the ``ISOLATED_AGENTS_SPAWN_SOCKET`` environment
     variable is not set or the socket is unreachable).
     """
-    
+
     def __init__(self, message: str = "Not running in a sub-agent context"):
         suggestion = (
             "spawn_sub_agent() can only be called from within an agent that has "
@@ -163,7 +164,7 @@ class SubAgentCancelledError(IsolatedAgentsError):
     """Raised when a sub-agent is explicitly cancelled via
     ``SubAgentHandle.cancel()`` and the caller awaits the result.
     """
-    
+
     def __init__(self, message: str = "Sub-agent was cancelled"):
         suggestion = "The sub-agent was cancelled before completion. This is expected if you called cancel()."
         super().__init__(message, suggestion=suggestion)
@@ -171,16 +172,16 @@ class SubAgentCancelledError(IsolatedAgentsError):
 
 class NetworkAccessDeniedError(IsolatedAgentsError):
     """Raised when network access is blocked by policy.
-    
+
     Attributes:
         endpoint: The endpoint that was blocked
         policy: The network policy that blocked access
     """
-    
+
     def __init__(self, endpoint: str, message: str | None = None):
         if not message:
             message = f"Network access denied to {endpoint}"
-        
+
         suggestion = (
             f"To allow access to {endpoint}, update your policy:\n"
             f"  policy = Policy(\n"
@@ -196,15 +197,15 @@ class NetworkAccessDeniedError(IsolatedAgentsError):
 
 class PackageInstallationError(IsolatedAgentsError):
     """Raised when pip package installation fails.
-    
+
     Attributes:
         package: The package that failed to install
         error: The error message from pip
     """
-    
+
     def __init__(self, package: str, error: str):
         message = f"Failed to install package '{package}': {error}"
-        
+
         suggestion = (
             f"Package installation failed. Try:\n"
             f"  • Check package name spelling: '{package}'\n"
@@ -219,16 +220,16 @@ class PackageInstallationError(IsolatedAgentsError):
 
 class ResourceLimitExceededError(IsolatedAgentsError):
     """Raised when agent exceeds resource limits.
-    
+
     Attributes:
         resource: The resource that was exceeded (cpu, memory, timeout)
         limit: The configured limit
         actual: The actual usage
     """
-    
+
     def __init__(self, resource: str, limit: float, actual: float):
         message = f"{resource.capitalize()} limit exceeded: {actual} > {limit}"
-        
+
         suggestion = None
         if resource == "memory":
             suggestion = (
@@ -245,7 +246,7 @@ class ResourceLimitExceededError(IsolatedAgentsError):
                 f"Execution timeout ({int(limit)}s) exceeded. Increase timeout:\n"
                 f"  policy = Policy(timeout_seconds={int(limit * 2)})  # Double timeout"
             )
-        
+
         super().__init__(message, suggestion=suggestion)
         self.resource = resource
         self.limit = limit
@@ -254,17 +255,17 @@ class ResourceLimitExceededError(IsolatedAgentsError):
 
 class AgentImportError(IsolatedAgentsError):
     """Raised when agent function cannot import required modules.
-    
+
     Attributes:
         module: The module that failed to import
         agent_name: The name of the agent function
     """
-    
+
     def __init__(self, module: str, agent_name: str | None = None):
         message = f"Agent failed to import module '{module}'"
         if agent_name:
             message += f" in function '{agent_name}'"
-        
+
         suggestion = (
             f"Module '{module}' not found. Add it to pip_packages:\n"
             f"  policy = Policy(pip_packages=['{module}'])\n\n"
@@ -283,7 +284,7 @@ class SubAgentCancelledError(RuntimeError):
 
 class WorkingDirectoryError(IsolatedAgentsError):
     """Raised when the specified working directory does not exist."""
-    
+
     def __init__(self, message: str, path: str | None = None):
         suggestion = None
         if path:
@@ -340,7 +341,7 @@ class ContainerError(IsolatedAgentsError):
         stderr: str | None = None,
     ) -> None:
         suggestion = None
-        
+
         # Provide helpful suggestions based on common errors
         if stderr:
             if "permission denied" in stderr.lower():
@@ -361,7 +362,7 @@ class ContainerError(IsolatedAgentsError):
                     "  • Network is enabled in policy: network=NetworkPolicy(disabled=False)\n"
                     "  • Endpoints are in allowed_endpoints list"
                 )
-        
+
         super().__init__(message, suggestion=suggestion)
         self.command = command or []
         self.exit_code = exit_code

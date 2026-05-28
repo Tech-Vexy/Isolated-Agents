@@ -6,7 +6,7 @@ Emits AuditEvent objects via an AuditAdapter.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Optional
 
 from isolated_agents_sdk.adapters.audit.base import AuditAdapter
@@ -19,6 +19,7 @@ from isolated_agents_sdk.models import AuditEvent
 # Detect if adapters are available
 try:
     from isolated_agents_sdk.adapters.factory import AdapterFactory
+
     _ADAPTERS_AVAILABLE = True
 except ImportError:
     _ADAPTERS_AVAILABLE = False
@@ -26,13 +27,15 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 # Violation event types that require violation_type and attempted_action in payload
-VIOLATION_EVENT_TYPES = frozenset({
-    "filesystem_access_denied",
-    "network_connection_denied",
-    "resource_limit_exceeded",
-    "privilege_escalation_attempt",
-    "output_size_exceeded",
-})
+VIOLATION_EVENT_TYPES = frozenset(
+    {
+        "filesystem_access_denied",
+        "network_connection_denied",
+        "resource_limit_exceeded",
+        "privilege_escalation_attempt",
+        "output_size_exceeded",
+    }
+)
 
 # Mapping from legacy event types to Adapter EventTypes
 EVENT_TYPE_MAP = {
@@ -59,6 +62,7 @@ EVENT_TYPE_MAP = {
     "sub_agent_count_exceeded": EventType.POLICY_VIOLATION,
 }
 
+
 class AuditLogger:
     """Emits structured audit log entries via an AuditAdapter.
 
@@ -72,9 +76,9 @@ class AuditLogger:
 
     def __init__(
         self,
-        adapter: Optional[AuditAdapter] = None,
-        log_output_path: Optional[str] = None,
-        enabled: bool = True
+        adapter: AuditAdapter | None = None,
+        log_output_path: str | None = None,
+        enabled: bool = True,
     ) -> None:
         """Initialize AuditLogger.
 
@@ -92,14 +96,10 @@ class AuditLogger:
         else:
             # If no path, use stderr to match legacy behavior
             self._adapter = StderrAuditAdapter()
-        
+
         self._initialized = False
         # v0.2.0 In-memory metrics for real-time observability
-        self._metrics = {
-            "total_runs": 0,
-            "violations": 0,
-            "agent_stats": {}
-        }
+        self._metrics = {"total_runs": 0, "violations": 0, "agent_stats": {}}
 
     async def _ensure_initialized(self) -> None:
         if not self._initialized:
@@ -114,9 +114,9 @@ class AuditLogger:
         """
         if not self.enabled:
             return
-            
+
         await self._ensure_initialized()
-        
+
         # v0.2.0: Update metrics
         if event.event_type == "agent_launched":
             self._metrics["total_runs"] += 1
@@ -124,7 +124,7 @@ class AuditLogger:
             self._metrics["violations"] += 1
 
         event_type = EVENT_TYPE_MAP.get(event.event_type, EventType.SYSTEM_INFO)
-        
+
         await self._adapter.log_event(
             event_type=event_type,
             session_id=event.session_id,
@@ -150,7 +150,7 @@ class AuditLogger:
             agent_id: The agent identifier.
             payload: Event-specific fields.
         """
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
         event = AuditEvent(
             event_type=event_type,
             timestamp=timestamp,

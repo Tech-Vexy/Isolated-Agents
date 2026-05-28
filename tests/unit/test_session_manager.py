@@ -9,26 +9,29 @@ Covers:
 from __future__ import annotations
 
 import signal
-from unittest.mock import MagicMock, patch, AsyncMock, ANY
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
-from isolated_agents_sdk.models import Policy, SessionInfo, SessionMetrics
-from isolated_agents_sdk.session_manager import SessionManager
 from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
 from isolated_agents_sdk.adapters.container.types import ContainerStats
-
+from isolated_agents_sdk.models import Policy, SessionInfo, SessionMetrics
+from isolated_agents_sdk.session_manager import SessionManager
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 async def _make_mock_adapter():
     adapter = MagicMock(spec=ContainerRuntimeAdapter)
-    adapter.get_container_stats = AsyncMock(return_value=ContainerStats(cpu_percent=5.0, memory_mb=128.0, memory_limit_mb=512.0))
+    adapter.get_container_stats = AsyncMock(
+        return_value=ContainerStats(cpu_percent=5.0, memory_mb=128.0, memory_limit_mb=512.0)
+    )
     adapter.destroy_container = AsyncMock()
     adapter.get_adapter_name = MagicMock(return_value="MockAdapter")
     return adapter
+
 
 def _make_manager(adapter=None) -> SessionManager:
     """Return a fresh SessionManager with a mocked AuditLogger."""
@@ -55,6 +58,7 @@ def _register(
 # ---------------------------------------------------------------------------
 # Cleanup handler registration (Req 9.2)
 # ---------------------------------------------------------------------------
+
 
 class TestCleanupHandlerRegistration:
     """Handlers must be registered exactly once, on the first session creation."""
@@ -106,6 +110,7 @@ class TestCleanupHandlerRegistration:
 # list_sessions() (Req 9.3)
 # ---------------------------------------------------------------------------
 
+
 class TestListSessions:
     """list_sessions() must return accurate snapshots of active sessions."""
 
@@ -146,6 +151,7 @@ class TestListSessions:
 
     def test_started_at_is_iso8601_string(self):
         import re
+
         manager = _make_manager()
         with patch("atexit.register"), patch("signal.signal"):
             _register(manager)
@@ -170,14 +176,18 @@ class TestListSessions:
 # Session removal after completion (Req 9.3)
 # ---------------------------------------------------------------------------
 
+
 class TestSessionRemovalAfterCompletion:
     """Sessions must be removed from the registry once they complete."""
 
     @pytest.mark.asyncio
     async def test_session_removed_on_successful_completion(self):
         manager = _make_manager()
-        with patch("atexit.register"), patch("signal.signal"), \
-             patch.object(manager, "destroy_container_async") as mock_destroy:
+        with (
+            patch("atexit.register"),
+            patch("signal.signal"),
+            patch.object(manager, "destroy_container_async") as mock_destroy,
+        ):
             mock_destroy.return_value = None
             _register(manager, session_id="s1")
             assert len(manager.list_sessions()) == 1
@@ -189,8 +199,11 @@ class TestSessionRemovalAfterCompletion:
     @pytest.mark.asyncio
     async def test_session_removed_on_failed_completion(self):
         manager = _make_manager()
-        with patch("atexit.register"), patch("signal.signal"), \
-             patch.object(manager, "destroy_container_async") as mock_destroy:
+        with (
+            patch("atexit.register"),
+            patch("signal.signal"),
+            patch.object(manager, "destroy_container_async") as mock_destroy,
+        ):
             mock_destroy.return_value = None
             _register(manager, session_id="s1")
             await manager.complete_session("s1", exit_code=1)
@@ -200,8 +213,11 @@ class TestSessionRemovalAfterCompletion:
     @pytest.mark.asyncio
     async def test_only_completed_session_removed(self):
         manager = _make_manager()
-        with patch("atexit.register"), patch("signal.signal"), \
-             patch.object(manager, "destroy_container_async") as mock_destroy:
+        with (
+            patch("atexit.register"),
+            patch("signal.signal"),
+            patch.object(manager, "destroy_container_async") as mock_destroy,
+        ):
             mock_destroy.return_value = None
             _register(manager, session_id="s1")
             _register(manager, session_id="s2")
@@ -224,8 +240,11 @@ class TestSessionRemovalAfterCompletion:
     @pytest.mark.asyncio
     async def test_destroy_container_called_on_completion(self):
         manager = _make_manager()
-        with patch("atexit.register"), patch("signal.signal"), \
-             patch.object(manager, "destroy_container_async") as mock_destroy:
+        with (
+            patch("atexit.register"),
+            patch("signal.signal"),
+            patch.object(manager, "destroy_container_async") as mock_destroy,
+        ):
             mock_destroy.return_value = None
             _register(manager, session_id="s1", container_id="c1", agent_id="a1")
             await manager.complete_session("s1", exit_code=0)
@@ -234,8 +253,11 @@ class TestSessionRemovalAfterCompletion:
 
     def test_destroy_all_clears_registry(self):
         manager = _make_manager()
-        with patch("atexit.register"), patch("signal.signal"), \
-             patch.object(manager, "destroy_container_sync"):
+        with (
+            patch("atexit.register"),
+            patch("signal.signal"),
+            patch.object(manager, "destroy_container_sync"),
+        ):
             _register(manager, session_id="s1")
             _register(manager, session_id="s2")
 
@@ -245,8 +267,11 @@ class TestSessionRemovalAfterCompletion:
 
     def test_destroy_all_calls_destroy_container_for_each_session(self):
         manager = _make_manager()
-        with patch("atexit.register"), patch("signal.signal"), \
-             patch.object(manager, "destroy_container_sync") as mock_destroy:
+        with (
+            patch("atexit.register"),
+            patch("signal.signal"),
+            patch.object(manager, "destroy_container_sync") as mock_destroy,
+        ):
             _register(manager, session_id="s1", container_id="c1")
             _register(manager, session_id="s2", container_id="c2")
 
@@ -260,6 +285,7 @@ class TestSessionRemovalAfterCompletion:
 # get_session_metrics() (Req 5.4)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestGetSessionMetrics:
     """get_session_metrics() must return CPU/memory data for active sessions
@@ -267,7 +293,9 @@ class TestGetSessionMetrics:
 
     async def test_metrics_returned_for_active_session(self):
         adapter = await _make_mock_adapter()
-        adapter.get_container_stats.return_value = ContainerStats(cpu_percent=12.5, memory_mb=256.0, memory_limit_mb=512.0)
+        adapter.get_container_stats.return_value = ContainerStats(
+            cpu_percent=12.5, memory_mb=256.0, memory_limit_mb=512.0
+        )
         manager = _make_manager(adapter=adapter)
         with patch("atexit.register"), patch("signal.signal"):
             _register(manager, session_id="s1", container_id="c1")
@@ -315,12 +343,14 @@ class TestGetSessionMetrics:
 
     async def test_raises_key_error_after_session_completes(self):
         manager = _make_manager()
-        with patch("atexit.register"), patch("signal.signal"), \
-             patch.object(manager, "destroy_container_async") as mock_destroy:
+        with (
+            patch("atexit.register"),
+            patch("signal.signal"),
+            patch.object(manager, "destroy_container_async") as mock_destroy,
+        ):
             mock_destroy.return_value = None
             _register(manager, session_id="s1")
             await manager.complete_session("s1", exit_code=0)
 
         with pytest.raises(KeyError):
             await manager.get_session_metrics("s1")
-

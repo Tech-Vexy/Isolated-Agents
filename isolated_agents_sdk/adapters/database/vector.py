@@ -9,6 +9,7 @@ from isolated_agents_sdk.adapters.database.base import DatabaseAdapter
 
 logger = logging.getLogger(__name__)
 
+
 class VectorDatabaseAdapter(DatabaseAdapter):
     """Adapter for Vector databases (Chroma, Pinecone)."""
 
@@ -25,23 +26,29 @@ class VectorDatabaseAdapter(DatabaseAdapter):
         if self.db_type == "chroma":
             try:
                 import chromadb
+
                 path = self.kwargs.get("path", "./chroma_db")
                 self._client = chromadb.PersistentClient(path=path)
             except ImportError:
-                raise ImportError("chromadb is required for Chroma support. Install it with 'pip install chromadb'")
-        
+                raise ImportError(
+                    "chromadb is required for Chroma support. Install it with 'pip install chromadb'"
+                )
+
         elif self.db_type == "pinecone":
             try:
                 from pinecone import Pinecone
+
                 api_key = self.kwargs.get("api_key")
                 self._client = Pinecone(api_key=api_key)
             except ImportError:
-                raise ImportError("pinecone-client is required for Pinecone support. Install it with 'pip install pinecone-client'")
-        
+                raise ImportError(
+                    "pinecone-client is required for Pinecone support. Install it with 'pip install pinecone-client'"
+                )
+
         else:
             raise ValueError(f"Unsupported Vector DB type: {self.db_type}")
 
-    async def query(self, query: Any, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    async def query(self, query: Any, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """Perform a similarity search."""
         if not self._client:
             await self.initialize()
@@ -54,40 +61,43 @@ class VectorDatabaseAdapter(DatabaseAdapter):
             # query can be a list of embeddings or text strings
             results = collection.query(
                 query_embeddings=query if isinstance(query[0], (float, int)) else None,
-                query_texts=query if isinstance(query, str) or (isinstance(query, list) and isinstance(query[0], str)) else None,
-                n_results=top_k
+                query_texts=query
+                if isinstance(query, str) or (isinstance(query, list) and isinstance(query[0], str))
+                else None,
+                n_results=top_k,
             )
-            
+
             # Format results
             flattened = []
             if results["ids"]:
                 for i in range(len(results["ids"][0])):
-                    flattened.append({
-                        "id": results["ids"][0][i],
-                        "document": results["documents"][0][i] if results["documents"] else None,
-                        "metadata": results["metadatas"][0][i] if results["metadatas"] else None,
-                        "distance": results["distances"][0][i] if results["distances"] else None
-                    })
+                    flattened.append(
+                        {
+                            "id": results["ids"][0][i],
+                            "document": results["documents"][0][i]
+                            if results["documents"]
+                            else None,
+                            "metadata": results["metadatas"][0][i]
+                            if results["metadatas"]
+                            else None,
+                            "distance": results["distances"][0][i]
+                            if results["distances"]
+                            else None,
+                        }
+                    )
             return flattened
 
         elif self.db_type == "pinecone":
             index = self._client.Index(collection_name)
-            results = index.query(
-                vector=query,
-                top_k=top_k,
-                include_metadata=True
-            )
+            results = index.query(vector=query, top_k=top_k, include_metadata=True)
             return [
-                {
-                    "id": match.id,
-                    "score": match.score,
-                    "metadata": match.metadata
-                } for match in results.matches
+                {"id": match.id, "score": match.score, "metadata": match.metadata}
+                for match in results.matches
             ]
 
         return []
 
-    async def execute(self, command: str, params: Optional[Dict[str, Any]] = None) -> int:
+    async def execute(self, command: str, params: dict[str, Any] | None = None) -> int:
         """Upsert or delete vectors."""
         if not self._client:
             await self.initialize()
@@ -101,7 +111,7 @@ class VectorDatabaseAdapter(DatabaseAdapter):
                     ids=params.get("ids", []),
                     embeddings=params.get("embeddings"),
                     metadatas=params.get("metadatas"),
-                    documents=params.get("documents")
+                    documents=params.get("documents"),
                 )
                 return len(params.get("ids", []))
             elif command == "delete":

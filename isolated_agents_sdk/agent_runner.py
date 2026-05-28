@@ -7,23 +7,25 @@ stdout/stderr, and monitors for privilege escalation.
 from __future__ import annotations
 
 import asyncio
-import cloudpickle
 import logging
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
-from isolated_agents_sdk.logging import add_global_sensitive_patterns
+import cloudpickle
+
 from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
 from isolated_agents_sdk.adapters.container.types import ContainerHandle
 from isolated_agents_sdk.audit_logger import AuditLogger
+from isolated_agents_sdk.logging import add_global_sensitive_patterns
 from isolated_agents_sdk.models import (
-    AgentResult,
-    Policy,
-    INTERNAL_BASE_PATH,
     CONTAINER_BOOTSTRAP_PATH,
     CONTAINER_OUTPUT_PATH,
     CONTAINER_SOURCE_PATH,
+    INTERNAL_BASE_PATH,
+    AgentResult,
+    Policy,
 )
 
 # Container-internal paths used during execution
@@ -36,6 +38,7 @@ logger = logging.getLogger(__name__)
 # Detect if adapters are available
 try:
     from isolated_agents_sdk.adapters.registry import get_registry as _get_adapter_registry
+
     _ADAPTERS_AVAILABLE = True
 except ImportError:
     _get_adapter_registry = None  # type: ignore[assignment]
@@ -100,6 +103,7 @@ if _result is not None:
         cloudpickle.dump(_result, _f)
 """
 
+
 class AgentRunner:
     """Executes an agent callable inside an already-provisioned container.
 
@@ -112,8 +116,8 @@ class AgentRunner:
     def __init__(
         self,
         handle: ContainerHandle,
-        adapter: Optional[ContainerRuntimeAdapter] = None,
-        audit_logger: Optional[AuditLogger] = None,
+        adapter: ContainerRuntimeAdapter | None = None,
+        audit_logger: AuditLogger | None = None,
     ) -> None:
         self._handle = handle
         if adapter:
@@ -122,6 +126,7 @@ class AgentRunner:
             self._adapter = _get_adapter_registry().get_container_adapter()
         else:
             from isolated_agents_sdk.adapters.container.podman import PodmanAdapter
+
             self._adapter = PodmanAdapter()
 
         self._audit_logger = audit_logger or AuditLogger()
@@ -132,14 +137,14 @@ class AgentRunner:
 
     async def _prepare_execution(
         self,
-        agent: Optional[Callable],
+        agent: Callable | None,
         policy: Policy,
         session_id: str,
         container_id: str,
         agent_args: tuple,
         agent_kwargs: dict,
-        agent_payload_hex: Optional[str],
-        spawn_socket_path: Optional[str],
+        agent_payload_hex: str | None,
+        spawn_socket_path: str | None,
     ) -> tuple[list[str], dict[str, str]]:
         """Prepare the command and environment for agent execution.
 
@@ -153,10 +158,12 @@ class AgentRunner:
         if policy.allow_sub_agents:
             await self._setup_spawn_daemon(container_id, spawn_socket_path=spawn_socket_path)
             import isolated_agents_sdk as _sdk
+
             _pkg_path = Path(_sdk.__file__).parent
             try:
                 await self._adapter.copy_to_container(
-                    container_id, str(_pkg_path),
+                    container_id,
+                    str(_pkg_path),
                     str(Path(INTERNAL_BASE_PATH) / "isolated_agents_sdk"),
                 )
             except Exception as e:
@@ -165,17 +172,20 @@ class AgentRunner:
         env: dict[str, str] = {}
         if policy.allow_sub_agents:
             from isolated_agents_sdk.models import CONTAINER_SPAWN_SOCKET_PATH
+
             env["ISOLATED_AGENTS_SPAWN_SOCKET"] = CONTAINER_SPAWN_SOCKET_PATH
             env["PYTHONPATH"] = f"{INTERNAL_BASE_PATH}:{env.get('PYTHONPATH', '')}".strip(":")
             env["ISOLATED_AGENTS_SESSION_ID"] = session_id
 
         if policy.proxy_url:
-            env.update({
-                "HTTP_PROXY": policy.proxy_url,
-                "HTTPS_PROXY": policy.proxy_url,
-                "http_proxy": policy.proxy_url,
-                "https_proxy": policy.proxy_url,
-            })
+            env.update(
+                {
+                    "HTTP_PROXY": policy.proxy_url,
+                    "HTTPS_PROXY": policy.proxy_url,
+                    "http_proxy": policy.proxy_url,
+                    "https_proxy": policy.proxy_url,
+                }
+            )
             if policy.network.grpc:
                 env["GRPC_PROXY"] = policy.proxy_url
                 env["grpc_proxy"] = policy.proxy_url
@@ -184,8 +194,13 @@ class AgentRunner:
             command = self._build_entrypoint_command(policy)
         else:
             command = await self._build_python_command(
-                agent, policy, container_id, agent_args, agent_kwargs,
-                agent_payload_hex, env,
+                agent,
+                policy,
+                container_id,
+                agent_args,
+                agent_kwargs,
+                agent_payload_hex,
+                env,
             )
 
         return command, env
@@ -200,12 +215,12 @@ class AgentRunner:
 
     async def _build_python_command(
         self,
-        agent: Optional[Callable],
+        agent: Callable | None,
         policy: Policy,
         container_id: str,
         agent_args: tuple,
         agent_kwargs: dict,
-        agent_payload_hex: Optional[str],
+        agent_payload_hex: str | None,
         env: dict[str, str],
     ) -> list[str]:
         """Serialise agent, install deps, and return the bootstrap command."""
@@ -223,7 +238,9 @@ class AgentRunner:
 
         packages_to_install = list(policy.pip_packages)
         should_inject_cloudpickle = False
-        if "cloudpickle" not in [p.split("==")[0].split(">=")[0].strip() for p in packages_to_install]:
+        if "cloudpickle" not in [
+            p.split("==")[0].split(">=")[0].strip() for p in packages_to_install
+        ]:
             if policy.pip_require_hashes:
                 should_inject_cloudpickle = True
             else:
@@ -231,10 +248,12 @@ class AgentRunner:
 
         if should_inject_cloudpickle:
             import cloudpickle as _cp
+
             cp_path = Path(_cp.__file__).parent
             try:
                 await self._adapter.copy_to_container(
-                    container_id, str(cp_path),
+                    container_id,
+                    str(cp_path),
                     str(Path(INTERNAL_BASE_PATH) / "cloudpickle"),
                 )
                 env["PYTHONPATH"] = f"{INTERNAL_BASE_PATH}:{env.get('PYTHONPATH', '')}".strip(":")
@@ -257,16 +276,16 @@ class AgentRunner:
 
     async def run(
         self,
-        agent: Optional[Callable],
+        agent: Callable | None,
         policy: Policy,
         session_id: str,
         agent_id: str,
         agent_args: tuple = (),
-        agent_kwargs: Optional[dict] = None,
-        agent_payload_hex: Optional[str] = None,
-        spawn_socket_path: Optional[str] = None,
-        on_stdout: Optional[Callable[[str], None]] = None,
-        on_stderr: Optional[Callable[[str], None]] = None,
+        agent_kwargs: dict | None = None,
+        agent_payload_hex: str | None = None,
+        spawn_socket_path: str | None = None,
+        on_stdout: Callable[[str], None] | None = None,
+        on_stderr: Callable[[str], None] | None = None,
     ) -> AgentResult:
         """Execute the agent inside the container.
 
@@ -325,7 +344,7 @@ class AgentRunner:
 
         while attempts < max_attempts:
             attempts += 1
-            
+
             # Emit agent_launched audit event (only on first attempt)
             if attempts == 1:
                 await self._audit_logger.log_event(
@@ -351,6 +370,7 @@ class AgentRunner:
                 )
                 # Create a dummy result for the rest of the flow
                 from isolated_agents_sdk.adapters.container.types import ExecResult
+
                 exec_result = ExecResult(exit_code=exit_code, stdout="", stderr="")
             else:
                 import sys
@@ -381,13 +401,13 @@ class AgentRunner:
                 except Exception as e:
                     logger.error(f"Execution failed: {e}")
                     raise
-            
+
             exit_code = exec_result.exit_code
 
             # Break if successful or interactive or no more retries
             if exit_code == 0 or policy.interactive or attempts >= max_attempts:
                 break
-            
+
             # Handle retry
             await self._audit_logger.log_event(
                 event_type="agent_retry",
@@ -396,7 +416,7 @@ class AgentRunner:
                 payload={
                     "attempt": attempts,
                     "exit_code": exit_code,
-                    "delay_seconds": policy.retry_delay_seconds
+                    "delay_seconds": policy.retry_delay_seconds,
                 },
             )
             await asyncio.sleep(policy.retry_delay_seconds)
@@ -421,7 +441,7 @@ class AgentRunner:
 
         artifacts = {}
         # Replay data collection would need more work to integrate with adapter
-        
+
         return AgentResult(
             exit_code=exit_code,
             artifacts=artifacts,
@@ -434,15 +454,17 @@ class AgentRunner:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _setup_spawn_daemon(self, container_id: str, spawn_socket_path: Optional[str] = None) -> None:
+    async def _setup_spawn_daemon(
+        self, container_id: str, spawn_socket_path: str | None = None
+    ) -> None:
         """Initialize the spawn daemon and mount the IPC socket.
-        
+
         This method ensures the container can reach the Spawn Daemon.
         If current runtime has a socket, it is mounted.
         """
         if not spawn_socket_path:
             return
-            
+
         # Mounting logic is typically handled by the adapter during provision.
         # However, if we are doing it via exec or post-provision, we need
         # adapter support. For now, we assume the provisioner handles it
@@ -485,7 +507,7 @@ class AgentRunner:
         self,
         container_id: str,
         packages: list[str],
-        index_url: Optional[str],
+        index_url: str | None,
         require_hashes: bool,
     ) -> None:
         """Install Python packages into a temporary directory inside the container.
@@ -501,23 +523,25 @@ class AgentRunner:
         """
         import re
 
-        _SAFE_SPECIFIER = re.compile(
-            r'^[A-Za-z0-9_.+\-\[\]@/=<>!~,;: ]+(--hash=[a-zA-Z0-9:]+)?$'
-        )
+        _SAFE_SPECIFIER = re.compile(r"^[A-Za-z0-9_.+\-\[\]@/=<>!~,;: ]+(--hash=[a-zA-Z0-9:]+)?$")
         for spec in packages:
             if not _SAFE_SPECIFIER.match(spec):
-                raise ValueError(
-                    f"pip package specifier contains unsafe characters: {spec!r}."
-                )
+                raise ValueError(f"pip package specifier contains unsafe characters: {spec!r}.")
 
         # Install to /tmp/site-packages because rootfs might be read-only.
         # Set HOME=/tmp to avoid pip trying to write to /root.
         pip_cmd = [
-            "python3", "-m", "pip", "install",
+            "python3",
+            "-m",
+            "pip",
+            "install",
             "--no-cache-dir",
-            "--target", _CONTAINER_SITE_PACKAGES,
-            "--retries", "10",
-            "--default-timeout", "180"
+            "--target",
+            _CONTAINER_SITE_PACKAGES,
+            "--retries",
+            "10",
+            "--default-timeout",
+            "180",
         ]
         if index_url is not None:
             pip_cmd.extend(["--index-url", index_url])
@@ -525,17 +549,10 @@ class AgentRunner:
             pip_cmd.append("--require-hashes")
         pip_cmd.extend(packages)
 
-        env = {
-            "HOME": "/tmp",
-            "PIP_BREAK_SYSTEM_PACKAGES": "1"
-        }
-        
+        env = {"HOME": "/tmp", "PIP_BREAK_SYSTEM_PACKAGES": "1"}
+
         result = await self._adapter.exec_in_container(
-            container_id=container_id, 
-            command=pip_cmd,
-            env=env,
-            user="root",
-            timeout=600
+            container_id=container_id, command=pip_cmd, env=env, user="root", timeout=600
         )
 
         if result.exit_code != 0:
@@ -548,11 +565,11 @@ class AgentRunner:
 
     async def _inject_source(
         self,
-        agent: Optional[Callable],
+        agent: Callable | None,
         container_id: str,
         agent_args: tuple = (),
-        agent_kwargs: Optional[dict] = None,
-        agent_payload_hex: Optional[str] = None,
+        agent_kwargs: dict | None = None,
+        agent_payload_hex: str | None = None,
     ) -> None:
         """Serialize the agent callable, args, and kwargs via cloudpickle and copy to container.
 
@@ -572,6 +589,7 @@ class AgentRunner:
                 tmp_path = tmp.name
         else:
             import cloudpickle
+
             if agent_kwargs is None:
                 agent_kwargs = {}
             payload = {"fn": agent, "args": agent_args, "kwargs": agent_kwargs}
@@ -600,7 +618,7 @@ class AgentRunner:
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
-    # v0.2.1: Removed _monitor_privilege_escalation. 
+    # v0.2.1: Removed _monitor_privilege_escalation.
     # High-overhead polling is ineffective against TOCTOU attacks.
     # Security is now enforced via Podman User Namespaces and Seccomp profiles.
 

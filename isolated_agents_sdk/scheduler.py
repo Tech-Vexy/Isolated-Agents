@@ -6,20 +6,22 @@ Enables scheduling agents to run at specific times or intervals in background ta
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from collections import deque
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, Union
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Union
 
-from isolated_agents_sdk.models import AgentResult, Policy
 from isolated_agents_sdk.logging import get_logger
+from isolated_agents_sdk.models import AgentResult, Policy
 
 logger = get_logger("scheduler")
 
 
 class ScheduledTask:
     """Represents an agent task scheduled for execution.
-    
+
     Attributes:
         task_id: Unique identifier for the task.
         agent: The agent callable to execute.
@@ -31,17 +33,17 @@ class ScheduledTask:
         interval: Time between recurring executions.
         status: Current status ("scheduled", "running", "completed", "cancelled").
     """
-    
+
     def __init__(
         self,
         task_id: str,
-        agent: Optional[Callable],
+        agent: Callable | None,
         working_dir: str,
-        policy: Optional[Policy] = None,
+        policy: Policy | None = None,
         args: tuple = (),
-        kwargs: Optional[Dict[str, Any]] = None,
-        run_at: Optional[datetime] = None,
-        interval: Optional[timedelta] = None,
+        kwargs: dict[str, Any] | None = None,
+        run_at: datetime | None = None,
+        interval: timedelta | None = None,
     ):
         self.task_id = task_id
         self.agent = agent
@@ -51,8 +53,8 @@ class ScheduledTask:
         self.kwargs = kwargs or {}
         self.interval = interval
         self.status = "scheduled"
-        self.last_run: Optional[datetime] = None
-        self.next_run: Optional[datetime] = run_at
+        self.last_run: datetime | None = None
+        self.next_run: datetime | None = run_at
         self.results: deque[AgentResult] = deque(maxlen=10)
 
     def __repr__(self) -> str:
@@ -61,28 +63,28 @@ class ScheduledTask:
 
 class AgentScheduler:
     """Lightweight background scheduler for isolated agents.
-    
-    This scheduler runs as an asyncio background task and manages the execution 
+
+    This scheduler runs as an asyncio background task and manages the execution
     of agents based on their scheduled times and intervals.
     """
-    
+
     def __init__(self, run_agent_coro: Callable, max_concurrent_agents: int = 10):
         """Initialize the scheduler.
-        
+
         Args:
             run_agent_coro: The async function used to run the agent (typically async_run_agent).
             max_concurrent_agents: Maximum number of agents to run simultaneously (default 10).
         """
         self._run_agent_coro = run_agent_coro
-        self._tasks: Dict[str, ScheduledTask] = {}
+        self._tasks: dict[str, ScheduledTask] = {}
         self._running = False
-        self._loop_task: Optional[asyncio.Task] = None
+        self._loop_task: asyncio.Task | None = None
         self._max_concurrent = max_concurrent_agents
-        self._semaphore: Optional[asyncio.Semaphore] = None
+        self._semaphore: asyncio.Semaphore | None = None
 
     async def start(self) -> None:
         """Start the background scheduler loop.
-        
+
         This must be called within an active asyncio event loop.
         """
         if self._running:
@@ -97,58 +99,56 @@ class AgentScheduler:
         self._running = False
         if self._loop_task:
             self._loop_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._loop_task
-            except asyncio.CancelledError:
-                pass
-        
+
         # Cancel all scheduled tasks
         for task in self._tasks.values():
             if task.status == "scheduled":
                 task.status = "cancelled"
-        
+
         logger.info("Agent Scheduler stopped.")
 
     def schedule_in(
         self,
-        delay: Union[int, float, timedelta],
-        agent: Optional[Callable],
+        delay: int | float | timedelta,
+        agent: Callable | None,
         working_dir: str,
-        policy: Optional[Policy] = None,
+        policy: Policy | None = None,
         args: tuple = (),
-        kwargs: Optional[Dict[str, Any]] = None,
+        kwargs: dict[str, Any] | None = None,
     ) -> str:
         """Schedule an agent to run once after a delay.
-        
+
         Args:
             delay: Delay in seconds or as a timedelta.
             agent: The agent function to run.
             working_dir: Path to the workspace for the agent.
             policy: Optional security policy.
             args/kwargs: Arguments for the agent.
-            
+
         Returns:
             The unique task_id for tracking or cancellation.
         """
         if isinstance(delay, (int, float)):
             delay = timedelta(seconds=delay)
-        
-        run_at = datetime.now(timezone.utc) + delay
+
+        run_at = datetime.now(UTC) + delay
         return self.schedule_at(run_at, agent, working_dir, policy, args, kwargs)
 
     def schedule_at(
         self,
         run_at: datetime,
-        agent: Optional[Callable],
+        agent: Callable | None,
         working_dir: str,
-        policy: Optional[Policy] = None,
+        policy: Policy | None = None,
         args: tuple = (),
-        kwargs: Optional[Dict[str, Any]] = None,
+        kwargs: dict[str, Any] | None = None,
     ) -> str:
         """Schedule an agent to run once at a specific UTC time."""
         if run_at.tzinfo is None:
-            run_at = run_at.replace(tzinfo=timezone.utc)
-            
+            run_at = run_at.replace(tzinfo=UTC)
+
         task_id = str(uuid.uuid4())
         task = ScheduledTask(
             task_id=task_id,
@@ -157,7 +157,7 @@ class AgentScheduler:
             policy=policy,
             args=args,
             kwargs=kwargs,
-            run_at=run_at
+            run_at=run_at,
         )
         self._tasks[task_id] = task
         logger.info(f"Task {task_id} scheduled for {run_at}")
@@ -165,16 +165,16 @@ class AgentScheduler:
 
     def schedule_interval(
         self,
-        interval: Union[int, float, timedelta],
-        agent: Optional[Callable],
+        interval: int | float | timedelta,
+        agent: Callable | None,
         working_dir: str,
-        policy: Optional[Policy] = None,
+        policy: Policy | None = None,
         args: tuple = (),
-        kwargs: Optional[Dict[str, Any]] = None,
-        start_at: Optional[datetime] = None,
+        kwargs: dict[str, Any] | None = None,
+        start_at: datetime | None = None,
     ) -> str:
         """Schedule an agent to run repeatedly at a fixed interval.
-        
+
         Args:
             interval: Time between runs (seconds or timedelta).
             agent: The agent function to run.
@@ -183,12 +183,12 @@ class AgentScheduler:
         """
         if isinstance(interval, (int, float)):
             interval = timedelta(seconds=interval)
-        
+
         if start_at is None:
-            start_at = datetime.now(timezone.utc)
+            start_at = datetime.now(UTC)
         elif start_at.tzinfo is None:
-            start_at = start_at.replace(tzinfo=timezone.utc)
-            
+            start_at = start_at.replace(tzinfo=UTC)
+
         task_id = str(uuid.uuid4())
         task = ScheduledTask(
             task_id=task_id,
@@ -198,7 +198,7 @@ class AgentScheduler:
             args=args,
             kwargs=kwargs,
             run_at=start_at,
-            interval=interval
+            interval=interval,
         )
         self._tasks[task_id] = task
         logger.info(f"Task {task_id} scheduled every {interval} starting {start_at}")
@@ -214,24 +214,24 @@ class AgentScheduler:
                 return True
         return False
 
-    def get_task(self, task_id: str) -> Optional[ScheduledTask]:
+    def get_task(self, task_id: str) -> ScheduledTask | None:
         """Retrieve a task by ID."""
         return self._tasks.get(task_id)
 
-    def list_tasks(self) -> List[ScheduledTask]:
+    def list_tasks(self) -> list[ScheduledTask]:
         """List all active and completed scheduled tasks."""
         return list(self._tasks.values())
 
     async def _scheduler_loop(self) -> None:
         """Main background loop."""
         while self._running:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             to_run = []
-            
+
             for task in self._tasks.values():
                 if task.status == "scheduled" and task.next_run and task.next_run <= now:
                     to_run.append(task)
-            
+
             for task in to_run:
                 # Update task state for the current run
                 task.last_run = now
@@ -240,16 +240,16 @@ class AgentScheduler:
                 else:
                     task.status = "completed"
                     task.next_run = None
-                
+
                 # Execute in background task to avoid blocking the scheduler loop
                 asyncio.create_task(self._execute_task(task))
-                
+
             await asyncio.sleep(1)
 
     async def _execute_task(self, task: ScheduledTask) -> None:
         """Single execution handler for a task."""
         if self._semaphore is None:
-             self._semaphore = asyncio.Semaphore(self._max_concurrent)
+            self._semaphore = asyncio.Semaphore(self._max_concurrent)
 
         async with self._semaphore:
             try:
@@ -259,7 +259,7 @@ class AgentScheduler:
                     task.working_dir,
                     policy=task.policy,
                     agent_args=task.args,
-                    agent_kwargs=task.kwargs
+                    agent_kwargs=task.kwargs,
                 )
                 task.results.append(result)
                 logger.info(f"Task {task.task_id} execution finished.")

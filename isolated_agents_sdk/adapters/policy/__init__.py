@@ -9,11 +9,11 @@ This package provides pluggable policy validator adapters for:
 Example usage:
     from isolated_agents_sdk.adapters.policy import DefaultPolicyValidator
     from isolated_agents_sdk.adapters.factory import AdapterFactory
-    
+
     # Create default validator
     adapter = AdapterFactory.create_policy_adapter("default")
     await adapter.initialize()
-    
+
     # Validate policy
     result = await adapter.validate_policy(policy)
     if not result.is_valid:

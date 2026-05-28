@@ -18,7 +18,7 @@ Example YAML configuration:
         - pandas
       allowed_env_vars:
         - OPENAI_API_KEY
-    
+
     agents:
       data_processor:
         workspace: ./workspace/data
@@ -28,7 +28,7 @@ Example YAML configuration:
             - pandas
             - numpy
             - matplotlib
-      
+
       web_scraper:
         workspace: ./workspace/scraper
         policy:
@@ -41,7 +41,7 @@ Note: Output is automatically placed in workspace/output/ for each agent.
 Usage:
     >>> from isolated_agents_sdk import Agent
     >>> from isolated_agents_sdk.config import load_config
-    >>> 
+    >>>
     >>> config = load_config("isolated-agents.yaml")
     >>> agent = Agent.from_config(config, "data_processor")
     >>> result = agent.run()
@@ -58,49 +58,49 @@ from isolated_agents_sdk.models import NetworkPolicy, Policy
 
 class AgentConfig:
     """Configuration for a single agent.
-    
+
     Attributes:
         name: Agent name
         workspace: Workspace directory path (output will be workspace/output)
         policy: Policy configuration
         description: Optional description
     """
-    
+
     def __init__(
         self,
         name: str,
-        workspace: Union[str, Path],
-        policy: Optional[Dict[str, Any]] = None,
-        description: Optional[str] = None,
+        workspace: str | Path,
+        policy: dict[str, Any] | None = None,
+        description: str | None = None,
     ):
         self.name = name
         self.workspace = Path(workspace)
         self.policy_dict = policy or {}
         self.description = description
-    
-    def build_policy(self, default_policy: Optional[Dict[str, Any]] = None) -> Policy:
+
+    def build_policy(self, default_policy: dict[str, Any] | None = None) -> Policy:
         """Build Policy object from configuration.
-        
+
         Args:
             default_policy: Default policy to merge with agent-specific policy
-        
+
         Returns:
             Policy object
         """
         # Start with default policy
         merged = default_policy.copy() if default_policy else {}
-        
+
         # Merge agent-specific policy
         merged = _deep_merge(merged, self.policy_dict)
-        
+
         # Handle network policy specially
         if "network" in merged:
             network_dict = merged["network"]
             merged["network"] = NetworkPolicy(**network_dict)
-        
+
         return Policy(**merged)
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "name": self.name,
@@ -112,126 +112,124 @@ class AgentConfig:
 
 class Config:
     """Main configuration object.
-    
+
     Attributes:
         default_policy: Default policy applied to all agents
         agents: Dictionary of agent configurations
         metadata: Optional metadata (version, author, etc.)
     """
-    
+
     def __init__(
         self,
-        default_policy: Optional[Dict[str, Any]] = None,
-        agents: Optional[Dict[str, AgentConfig]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        default_policy: dict[str, Any] | None = None,
+        agents: dict[str, AgentConfig] | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         self.default_policy = default_policy or {}
         self.agents = agents or {}
         self.metadata = metadata or {}
-    
+
     def get_agent(self, name: str) -> AgentConfig:
         """Get agent configuration by name.
-        
+
         Args:
             name: Agent name
-        
+
         Returns:
             AgentConfig object
-        
+
         Raises:
             KeyError: If agent not found
         """
         if name not in self.agents:
             available = ", ".join(self.agents.keys())
             raise KeyError(
-                f"Agent '{name}' not found in configuration. "
-                f"Available agents: {available}"
+                f"Agent '{name}' not found in configuration. Available agents: {available}"
             )
         return self.agents[name]
-    
+
     def list_agents(self) -> list[str]:
         """List all agent names."""
         return list(self.agents.keys())
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "default_policy": self.default_policy,
-            "agents": {
-                name: agent.to_dict()
-                for name, agent in self.agents.items()
-            },
+            "agents": {name: agent.to_dict() for name, agent in self.agents.items()},
             "metadata": self.metadata,
         }
 
 
-def load_config(path: Union[str, Path]) -> Config:
-    """Load configuration from YAML or JSON file.
-    
+def load_config(path: str | Path) -> Config:
+    """Load configuration from YAML, JSON, or TOML file.
+
     Args:
-        path: Path to configuration file (.yaml, .yml, or .json)
-    
+        path: Path to configuration file (.yaml, .yml, .json, or .toml)
+
     Returns:
         Config object
-    
+
     Raises:
         FileNotFoundError: If file doesn't exist
         ValueError: If file format is not supported
-    
+
     Example:
         >>> config = load_config("isolated-agents.yaml")
         >>> print(config.list_agents())
         ['data_processor', 'web_scraper']
     """
     path = Path(path)
-    
+
     if not path.exists():
         raise FileNotFoundError(f"Configuration file not found: {path}")
-    
+
     # Load file based on extension
     if path.suffix in [".yaml", ".yml"]:
         data = _load_yaml(path)
     elif path.suffix == ".json":
         data = _load_json(path)
+    elif path.suffix == ".toml":
+        data = _load_toml(path)
     else:
         raise ValueError(
-            f"Unsupported file format: {path.suffix}. "
-            f"Use .yaml, .yml, or .json"
+            f"Unsupported file format: {path.suffix}. Use .yaml, .yml, .json, or .toml"
         )
-    
+
     return _parse_config(data)
 
 
-def save_config(config: Config, path: Union[str, Path]) -> None:
-    """Save configuration to YAML or JSON file.
-    
+def save_config(config: Config, path: str | Path) -> None:
+    """Save configuration to YAML, JSON, or TOML file.
+
     Args:
         config: Config object to save
-        path: Path to save to (.yaml, .yml, or .json)
-    
+        path: Path to save to (.yaml, .yml, .json, or .toml)
+
     Example:
         >>> config = Config(default_policy={"memory_mb": 2048})
         >>> save_config(config, "isolated-agents.yaml")
     """
     path = Path(path)
     data = config.to_dict()
-    
+
     if path.suffix in [".yaml", ".yml"]:
         _save_yaml(data, path)
     elif path.suffix == ".json":
         _save_json(data, path)
+    elif path.suffix == ".toml":
+        _save_toml(data, path)
     else:
         raise ValueError(
-            f"Unsupported file format: {path.suffix}. "
-            f"Use .yaml, .yml, or .json"
+            f"Unsupported file format: {path.suffix}. Use .yaml, .yml, .json, or .toml"
         )
 
 
-def _parse_config(data: Dict[str, Any]) -> Config:
+def _parse_config(data: dict[str, Any]) -> Config:
     """Parse configuration dictionary into Config object."""
     default_policy = data.get("default_policy", {})
     metadata = data.get("metadata", {})
-    
+
     agents = {}
     for name, agent_data in data.get("agents", {}).items():
         agents[name] = AgentConfig(
@@ -240,7 +238,7 @@ def _parse_config(data: Dict[str, Any]) -> Config:
             policy=agent_data.get("policy", {}),
             description=agent_data.get("description"),
         )
-    
+
     return Config(
         default_policy=default_policy,
         agents=agents,
@@ -248,7 +246,7 @@ def _parse_config(data: Dict[str, Any]) -> Config:
     )
 
 
-def _load_yaml(path: Path) -> Dict[str, Any]:
+def _load_yaml(path: Path) -> dict[str, Any]:
     """Load YAML file."""
     try:
         import yaml
@@ -257,12 +255,12 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
             "PyYAML is required to load YAML configuration files. "
             "Install it with: pip install pyyaml"
         )
-    
-    with open(path, 'r') as f:
+
+    with open(path) as f:
         return yaml.safe_load(f) or {}
 
 
-def _save_yaml(data: Dict[str, Any], path: Path) -> None:
+def _save_yaml(data: dict[str, Any], path: Path) -> None:
     """Save YAML file."""
     try:
         import yaml
@@ -271,50 +269,83 @@ def _save_yaml(data: Dict[str, Any], path: Path) -> None:
             "PyYAML is required to save YAML configuration files. "
             "Install it with: pip install pyyaml"
         )
-    
-    with open(path, 'w') as f:
+
+    with open(path, "w") as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False)
 
 
-def _load_json(path: Path) -> Dict[str, Any]:
+def _load_json(path: Path) -> dict[str, Any]:
     """Load JSON file."""
-    with open(path, 'r') as f:
+    with open(path) as f:
         return json.load(f)
 
 
-def _save_json(data: Dict[str, Any], path: Path) -> None:
+def _save_json(data: dict[str, Any], path: Path) -> None:
     """Save JSON file."""
-    with open(path, 'w') as f:
+    with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
 
-def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-    """Deep merge two dictionaries.
+def _load_toml(path: Path) -> dict[str, Any]:
+    """Load TOML file."""
+    import tomllib
+
+    with open(path, "rb") as f:
+        return tomllib.load(f)
+
+
+def _remove_none_values(d: Any) -> Any:
+    """Recursively remove None values from dictionary since TOML doesn't support null."""
+    if isinstance(d, dict):
+        return {k: _remove_none_values(v) for k, v in d.items() if v is not None}
+    elif isinstance(d, list):
+        return [_remove_none_values(v) for v in d if v is not None]
+    return d
+
+def _save_toml(data: dict[str, Any], path: Path) -> None:
+    """Save TOML file."""
+    try:
+        import tomli_w
+    except ImportError:
+        raise ImportError(
+            "tomli-w is required to save TOML configuration files. "
+            "Install it with: pip install tomli-w"
+        )
+
+    # TOML does not support null/None values, so we must remove them
+    cleaned_data = _remove_none_values(data)
     
+    with open(path, "wb") as f:
+        tomli_w.dump(cleaned_data, f)
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Deep merge two dictionaries.
+
     Args:
         base: Base dictionary
         override: Dictionary to merge in (takes precedence)
-    
+
     Returns:
         Merged dictionary
     """
     result = base.copy()
-    
+
     for key, value in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):
             result[key] = _deep_merge(result[key], value)
         else:
             result[key] = value
-    
+
     return result
 
 
-def create_default_config(path: Union[str, Path]) -> None:
+def create_default_config(path: str | Path) -> None:
     """Create a default configuration file.
-    
+
     Args:
         path: Path to create configuration file
-    
+
     Example:
         >>> create_default_config("isolated-agents.yaml")
     """
@@ -328,7 +359,7 @@ def create_default_config(path: Union[str, Path]) -> None:
                 "allowed_endpoints": [
                     "api.openai.com:443",
                     "api.anthropic.com:443",
-                ]
+                ],
             },
             "pip_packages": [
                 "requests",
@@ -353,6 +384,6 @@ def create_default_config(path: Union[str, Path]) -> None:
             "description": "Isolated Agents SDK configuration",
         },
     )
-    
+
     save_config(default_config, path)
     print(f"Created default configuration at: {path}")

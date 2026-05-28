@@ -5,9 +5,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+
 class DatabaseAdapter(ABC):
     """Abstract base class for all database adapters.
-    
+
     Database adapters allow the host to provide mediated access to databases
     for isolated agents without exposing the database network or credentials
     to the container.
@@ -19,12 +20,12 @@ class DatabaseAdapter(ABC):
         pass
 
     @abstractmethod
-    async def query(self, query: str, params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    async def query(self, query: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         """Execute a query and return results as a list of dictionaries."""
         pass
 
     @abstractmethod
-    async def execute(self, command: str, params: Optional[Dict[str, Any]] = None) -> int:
+    async def execute(self, command: str, params: dict[str, Any] | None = None) -> int:
         """Execute a command (INSERT, UPDATE, DELETE) and return affected row count."""
         pass
 

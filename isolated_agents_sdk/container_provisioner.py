@@ -45,8 +45,8 @@ class ContainerProvisioner:
 
     def __init__(
         self,
-        adapter: Optional[ContainerRuntimeAdapter] = None,
-        audit_logger: Optional[AuditLogger] = None,
+        adapter: ContainerRuntimeAdapter | None = None,
+        audit_logger: AuditLogger | None = None,
         base_image: str = DEFAULT_IMAGE,
     ) -> None:
         self._adapter = adapter or PodmanAdapter(base_image=base_image)
@@ -63,7 +63,7 @@ class ContainerProvisioner:
         policy: Policy,
         session_id: str,
         agent_id: str,
-        spawn_socket_path: Optional[str] = None,
+        spawn_socket_path: str | None = None,
     ) -> ContainerHandle:
         """Provision a container for the given policy.
 
@@ -82,9 +82,7 @@ class ContainerProvisioner:
         """
         working_dir = Path(working_dir)
         if not working_dir.exists():
-            raise WorkingDirectoryError(
-                f"Working directory does not exist: {working_dir}"
-            )
+            raise WorkingDirectoryError(f"Working directory does not exist: {working_dir}")
 
         # Initialize adapter if needed
         try:
@@ -96,22 +94,22 @@ class ContainerProvisioner:
 
         # Map Policy to Adapter types
         image = policy.base_image or self._base_image
-        
+
         # 1. Base mounts (Workspace and Policy mounts)
-        mounts = [
-            Mount(source=str(working_dir), target="/workspace", readonly=False)
-        ]
-        
+        mounts = [Mount(source=str(working_dir), target="/workspace", readonly=False)]
+
         # If we have an output path in container, ensure it's writable and limited.
-        # Note: If read_only_rootfs is True, the adapter might also try to create a tmpfs 
+        # Note: If read_only_rootfs is True, the adapter might also try to create a tmpfs
         # at /output. The provisioner's explicit mount here will handle the size constraint.
         if policy.output_path_in_container:
-            mounts.append(Mount(
-                source="tmpfs",
-                target=policy.output_path_in_container,
-                readonly=False,
-                size_mb=policy.tmpfs_size_mb
-            ))
+            mounts.append(
+                Mount(
+                    source="tmpfs",
+                    target=policy.output_path_in_container,
+                    readonly=False,
+                    size_mb=policy.tmpfs_size_mb,
+                )
+            )
 
         for mount_path in policy.readonly_mounts:
             mounts.append(Mount(source=mount_path, target=mount_path, readonly=True))
@@ -120,22 +118,22 @@ class ContainerProvisioner:
         # This hidden mount holds bootstrap scripts, source code, and internal IPC sockets.
         # It is isolated from the user's /tmp and /workspace to prevent collisions.
         from isolated_agents_sdk.models import INTERNAL_BASE_PATH
+
         internal_tmpfs = Mount(
-            source="tmpfs", 
-            target=INTERNAL_BASE_PATH, 
+            source="tmpfs",
+            target=INTERNAL_BASE_PATH,
             readonly=False,
-            size_mb=64  # 64MB is plenty for internal sockets and scripts
+            size_mb=64,  # 64MB is plenty for internal sockets and scripts
         )
         mounts.append(internal_tmpfs)
 
         # 3. Add Spawn Socket mount if recursion is enabled
         if spawn_socket_path and policy.allow_sub_agents:
             from isolated_agents_sdk.models import CONTAINER_SPAWN_SOCKET_PATH
-            mounts.append(Mount(
-                source=spawn_socket_path, 
-                target=CONTAINER_SPAWN_SOCKET_PATH, 
-                readonly=False
-            ))
+
+            mounts.append(
+                Mount(source=spawn_socket_path, target=CONTAINER_SPAWN_SOCKET_PATH, readonly=False)
+            )
 
         resources = ResourceLimits(
             cpu_cores=policy.cpu_cores,
@@ -168,15 +166,16 @@ class ContainerProvisioner:
             value = os.environ.get(var)
             if value is not None:
                 env[var] = value
-        
+
         # Add explicit variables
         env.update(policy.env_vars)
-        
+
         # Add metadata for sub-agents and durable execution
         env["ISOLATED_AGENTS_SESSION_ID"] = session_id
         env["ISOLATED_AGENTS_AGENT_ID"] = agent_id
         if spawn_socket_path and policy.allow_sub_agents:
             from isolated_agents_sdk.models import CONTAINER_SPAWN_SOCKET_PATH
+
             env["ISOLATED_AGENTS_SPAWN_SOCKET"] = CONTAINER_SPAWN_SOCKET_PATH
 
         try:

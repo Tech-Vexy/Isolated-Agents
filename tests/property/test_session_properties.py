@@ -4,27 +4,48 @@ Feature: isolated-agents-sdk
 """
 
 from __future__ import annotations
-import asyncio
 
+import asyncio
 import tempfile
 import unittest.mock
 from pathlib import Path
 
-from hypothesis import given, settings, strategies as st, HealthCheck
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from isolated_agents_sdk.container_provisioner import ContainerProvisioner
 from isolated_agents_sdk.models import NetworkPolicy, Policy
-
 
 # ---------------------------------------------------------------------------
 # Strategies
 # ---------------------------------------------------------------------------
 
-_WINDOWS_RESERVED = frozenset({
-    "con", "prn", "aux", "nul",
-    "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
-    "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
-})
+_WINDOWS_RESERVED = frozenset(
+    {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        "com1",
+        "com2",
+        "com3",
+        "com4",
+        "com5",
+        "com6",
+        "com7",
+        "com8",
+        "com9",
+        "lpt1",
+        "lpt2",
+        "lpt3",
+        "lpt4",
+        "lpt5",
+        "lpt6",
+        "lpt7",
+        "lpt8",
+        "lpt9",
+    }
+)
 
 # Lowercase-only filenames avoid Windows case-insensitive filesystem collisions.
 _filename_strategy = st.text(
@@ -76,6 +97,7 @@ _policy_strategy = st.builds(
 # Property 2: Working directory contents are present before agent execution
 # ---------------------------------------------------------------------------
 
+
 # Feature: isolated-agents-sdk, Property 2: Working directory contents are present before agent execution
 @given(files=_file_set_strategy, policy=_policy_strategy)
 @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow], deadline=None)
@@ -115,25 +137,31 @@ def test_working_directory_contents_present_before_execution(
         # Mock subprocess.run so ContainerProvisioner.provision() doesn't
         # require a real Podman installation.
         fake_container_id = "abc123fakeid"
-        
+
         async def mock_exec(*args, **kwargs):
             mock_proc = unittest.mock.AsyncMock()
             mock_proc.returncode = 0
             mock_proc.wait = unittest.mock.AsyncMock(return_value=0)
-            mock_proc.stdout.read = unittest.mock.AsyncMock(side_effect=[fake_container_id.encode() + b"\n", b""])
+            mock_proc.stdout.read = unittest.mock.AsyncMock(
+                side_effect=[fake_container_id.encode() + b"\n", b""]
+            )
             mock_proc.stderr.read = unittest.mock.AsyncMock(return_value=b"")
             return mock_proc
 
-        with unittest.mock.patch("asyncio.create_subprocess_exec", side_effect=mock_exec) as mock_run:
+        with unittest.mock.patch(
+            "asyncio.create_subprocess_exec", side_effect=mock_exec
+        ) as mock_run:
             # Also mock shutil.which so _check_podman() passes
             with unittest.mock.patch("shutil.which", return_value="/usr/bin/podman"):
                 provisioner = ContainerProvisioner()
-                handle = asyncio.run(provisioner.provision(
-                    working_dir=working_dir,
-                    policy=policy,
-                    session_id="test-session-001",
-                    agent_id="test-agent-001",
-                ))
+                handle = asyncio.run(
+                    provisioner.provision(
+                        working_dir=working_dir,
+                        policy=policy,
+                        session_id="test-session-001",
+                        agent_id="test-agent-001",
+                    )
+                )
 
         # Confirm the container was provisioned with the correct ID
         assert handle.container_id == fake_container_id
@@ -160,9 +188,7 @@ def test_working_directory_contents_present_before_execution(
             # confirm the mount is present (already asserted above) and that
             # the file exists on the host side of the mount.
             host_file = working_dir / filename
-            assert host_file.exists(), (
-                f"File '{filename}' missing from working directory host path"
-            )
+            assert host_file.exists(), f"File '{filename}' missing from working directory host path"
             assert host_file.read_bytes() == files[filename], (
                 f"File '{filename}' content mismatch in working directory"
             )
@@ -171,6 +197,7 @@ def test_working_directory_contents_present_before_execution(
 # ---------------------------------------------------------------------------
 # Property 3: Container is destroyed after every session
 # ---------------------------------------------------------------------------
+
 
 # Feature: isolated-agents-sdk, Property 3: Container is destroyed after every session
 @given(
@@ -204,8 +231,8 @@ def test_container_destroyed_after_every_session(
 
     Validates: Requirements 1.5, 9.1
     """
-    from isolated_agents_sdk.session_manager import SessionManager
     from isolated_agents_sdk.audit_logger import AuditLogger
+    from isolated_agents_sdk.session_manager import SessionManager
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as log_file:
         log_path = log_file.name
@@ -236,8 +263,10 @@ def test_container_destroyed_after_every_session(
         result.stdout = ""
         return result
 
-    with unittest.mock.patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec), \
-         unittest.mock.patch("subprocess.run", side_effect=fake_subprocess_run):
+    with (
+        unittest.mock.patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec),
+        unittest.mock.patch("subprocess.run", side_effect=fake_subprocess_run),
+    ):
         # Register the session (simulates container provisioned successfully)
         manager.register_session(
             session_id=session_id,
@@ -283,11 +312,12 @@ def test_container_destroyed_after_every_session(
 # Property 12: Session registry reflects active sessions
 # ---------------------------------------------------------------------------
 
+
 # Feature: isolated-agents-sdk, Property 12: Session registry reflects active sessions
 @given(
     session_data=st.lists(
         st.tuples(
-            st.uuids().map(str),   # session_id
+            st.uuids().map(str),  # session_id
             st.text(alphabet="abcdef0123456789", min_size=12, max_size=64),  # container_id
             st.text(min_size=1, max_size=40),  # agent_id
         ),
@@ -316,8 +346,8 @@ def test_session_registry_reflects_active_sessions(
 
     Validates: Requirements 9.3
     """
-    from isolated_agents_sdk.session_manager import SessionManager
     from isolated_agents_sdk.audit_logger import AuditLogger
+    from isolated_agents_sdk.session_manager import SessionManager
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as log_file:
         log_path = log_file.name
@@ -356,8 +386,7 @@ def test_session_registry_reflects_active_sessions(
 
         for session_id, container_id, _ in session_data:
             assert session_id in active_ids, (
-                f"Session '{session_id}' not found in list_sessions(). "
-                f"Active IDs: {active_ids}"
+                f"Session '{session_id}' not found in list_sessions(). Active IDs: {active_ids}"
             )
             assert active_container_ids[session_id] == container_id, (
                 f"Session '{session_id}' has wrong container_id. "
@@ -402,6 +431,7 @@ def test_session_registry_reflects_active_sessions(
 # Property 13: Timeout terminates session
 # ---------------------------------------------------------------------------
 
+
 # Feature: isolated-agents-sdk, Property 13: Timeout terminates session
 @given(
     timeout_seconds=st.integers(min_value=1, max_value=60),
@@ -436,8 +466,8 @@ def test_timeout_terminates_session(
 
     Validates: Requirements 9.4
     """
-    from isolated_agents_sdk.session_manager import SessionManager
     from isolated_agents_sdk.audit_logger import AuditLogger
+    from isolated_agents_sdk.session_manager import SessionManager
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".log", delete=False) as log_file:
         log_path = log_file.name
@@ -494,6 +524,7 @@ def test_timeout_terminates_session(
 
     # 4. A resource_limit_exceeded audit event MUST have been emitted
     import json
+
     with open(log_path) as f:
         log_lines = [line.strip() for line in f if line.strip()]
 
@@ -517,6 +548,5 @@ def test_timeout_terminates_session(
     # The payload MUST identify this as a timeout violation
     event_payload = timeout_events[0].get("payload", {})
     assert event_payload.get("violation_type") == "timeout", (
-        f"Expected violation_type='timeout' in audit event payload, "
-        f"got: {event_payload}"
+        f"Expected violation_type='timeout' in audit event payload, got: {event_payload}"
     )

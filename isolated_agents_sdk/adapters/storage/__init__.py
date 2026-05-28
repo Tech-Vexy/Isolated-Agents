@@ -10,14 +10,14 @@ This package provides pluggable storage adapters for:
 Example usage:
     from isolated_agents_sdk.adapters.storage import LocalStorageAdapter
     from isolated_agents_sdk.adapters.factory import AdapterFactory
-    
+
     # Create local storage adapter
     adapter = AdapterFactory.create_storage_adapter("local", base_path="/tmp/storage")
     await adapter.initialize()
-    
+
     # Store artifact
     await adapter.store_artifact("session-123", "output.txt", b"Hello, World!")
-    
+
     # Retrieve artifact
     data = await adapter.retrieve_artifact("session-123", "output.txt")
 """

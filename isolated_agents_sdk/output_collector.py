@@ -20,27 +20,30 @@ Design notes
 
 import logging
 import tempfile
-import cloudpickle
 from pathlib import Path
-from typing import Optional, Any
+from typing import Any, Optional
+
+import cloudpickle
 
 from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
 from isolated_agents_sdk.adapters.storage.base import StorageAdapter
 from isolated_agents_sdk.adapters.storage.local import LocalStorageAdapter
 from isolated_agents_sdk.audit_logger import AuditLogger
 from isolated_agents_sdk.exceptions import OutputSizeLimitError
-from isolated_agents_sdk.models import AgentResult, Policy, CONTAINER_OUTPUT_PATH
+from isolated_agents_sdk.models import CONTAINER_OUTPUT_PATH, AgentResult, Policy
 
 # Detect if adapters are available
 try:
     from isolated_agents_sdk.adapters.factory import AdapterFactory
     from isolated_agents_sdk.adapters.registry import get_registry as _get_registry
+
     _ADAPTERS_AVAILABLE = True
 except ImportError:
     _get_registry = None  # type: ignore[assignment]
     _ADAPTERS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
 
 class OutputCollector:
     """Collects output artifacts from a container after agent execution.
@@ -53,9 +56,9 @@ class OutputCollector:
 
     def __init__(
         self,
-        container_adapter: Optional[ContainerRuntimeAdapter] = None,
-        storage_adapter: Optional[StorageAdapter] = None,
-        audit_logger: Optional[AuditLogger] = None,
+        container_adapter: ContainerRuntimeAdapter | None = None,
+        storage_adapter: StorageAdapter | None = None,
+        audit_logger: AuditLogger | None = None,
     ) -> None:
         if container_adapter:
             self._container_adapter = container_adapter
@@ -63,6 +66,7 @@ class OutputCollector:
             self._container_adapter = _get_registry().get_container_adapter()
         else:
             from isolated_agents_sdk.adapters.container.podman import PodmanAdapter
+
             self._container_adapter = PodmanAdapter()
 
         self._storage_adapter = storage_adapter
@@ -80,7 +84,7 @@ class OutputCollector:
         exit_code: int,
         session_id: str,
         agent_id: str,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> AgentResult:
         """Copy output files and the return value from the container to the host.
 
@@ -106,11 +110,11 @@ class OutputCollector:
         host_output_path = Path(host_output_path)
         output_path_in_container = policy.output_path_in_container
         max_output_bytes = policy.max_output_bytes
-        
+
         # Initialize storage adapter if not provided
         if self._storage_adapter is None:
             self._storage_adapter = LocalStorageAdapter(base_path=host_output_path)
-        
+
         await self._storage_adapter.initialize()
 
         # 1. Check whether the output directory exists inside the container.
@@ -120,12 +124,13 @@ class OutputCollector:
         )
         if result.exit_code != 0:
             logger.warning(
-                "Output path '%s' does not exist in container '%s'; "
-                "returning empty artifacts.",
+                "Output path '%s' does not exist in container '%s'; returning empty artifacts.",
                 output_path_in_container,
                 container_id,
             )
-            return AgentResult(exit_code=exit_code, artifacts={}, session_id=session_id, error=error)
+            return AgentResult(
+                exit_code=exit_code, artifacts={}, session_id=session_id, error=error
+            )
 
         # 2. List regular files only (no symlinks, no directories).
         # We use 'find' via exec.
@@ -133,7 +138,9 @@ class OutputCollector:
             container_id, ["find", output_path_in_container, "-type", "f"]
         )
         if find_result.exit_code != 0:
-            return AgentResult(exit_code=exit_code, artifacts={}, session_id=session_id, error=error)
+            return AgentResult(
+                exit_code=exit_code, artifacts={}, session_id=session_id, error=error
+            )
 
         relative_paths = []
         prefix = output_path_in_container.rstrip("/") + "/"
@@ -141,15 +148,14 @@ class OutputCollector:
             full = line.strip()
             if not full:
                 continue
-            if full.startswith(prefix):
-                rel = full[len(prefix):]
-            else:
-                rel = full
+            rel = full[len(prefix) :] if full.startswith(prefix) else full
             if rel:
                 relative_paths.append(rel)
 
         if not relative_paths:
-            return AgentResult(exit_code=exit_code, artifacts={}, session_id=session_id, error=error)
+            return AgentResult(
+                exit_code=exit_code, artifacts={}, session_id=session_id, error=error
+            )
 
         # 2b. v0.2.1: Check total size inside container BEFORE copying to host.
         # This prevents host-side resource exhaustion (Disk Spike) from malicious agents.
@@ -226,7 +232,7 @@ class OutputCollector:
                     artifact_name=rel,
                     data=data,
                 )
-                
+
                 # Maintain backward compatibility: return local path if possible
                 artifacts[rel] = location.path or str(location.url)
 
@@ -249,7 +255,8 @@ class OutputCollector:
                 elif size > _MAX_RETURN_BYTES:
                     logger.warning(
                         "Agent return value (%d bytes) exceeds %d byte cap; discarding.",
-                        size, _MAX_RETURN_BYTES,
+                        size,
+                        _MAX_RETURN_BYTES,
                     )
                 else:
                     with open(tmp_path, "rb") as f:
@@ -279,6 +286,7 @@ class OutputCollector:
         """Validate the agent's output against a JSON Schema."""
         try:
             from jsonschema import validate
+
             validate(instance=output, schema=schema)
         except ImportError:
             logger.warning("jsonschema not installed; skipping structured output validation.")

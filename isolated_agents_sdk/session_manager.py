@@ -8,40 +8,43 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import contextlib
+import json
 import logging
 import signal
 import threading
-import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
 from isolated_agents_sdk.audit_logger import AuditLogger
-from isolated_agents_sdk.models import Policy, SessionInfo, SessionMetrics, SubSessionInfo
 from isolated_agents_sdk.logging import get_logger
+from isolated_agents_sdk.models import Policy, SessionInfo, SessionMetrics, SubSessionInfo
 
 logger = get_logger("session_manager")
 
 # Detect if adapters are available
 try:
     from isolated_agents_sdk.adapters.registry import get_adapter_registry
+
     _ADAPTERS_AVAILABLE = True
 except ImportError:
     _ADAPTERS_AVAILABLE = False
+
 
 @dataclass
 class _SessionEntry:
     """Internal entry combining public SessionInfo with runtime handles."""
 
     info: SessionInfo
-    process: Optional[object]  # subprocess.Popen or asyncio.subprocess.Process
+    process: object | None  # subprocess.Popen or asyncio.subprocess.Process
     policy: Policy
-    audit_logger: Optional[AuditLogger] = None
-    last_resource_poll: Optional[datetime] = None
-    parent_session_id: Optional[str] = None
-    
+    audit_logger: AuditLogger | None = None
+    last_resource_poll: datetime | None = None
+    parent_session_id: str | None = None
+
     # Resource Tracking (v0.2.1)
     # The allocated resources for this session's own container
     allocated_cpu: float = 0.0
@@ -65,9 +68,9 @@ class SessionManager:
 
     def __init__(
         self,
-        adapter: Optional[ContainerRuntimeAdapter] = None,
-        audit_logger: Optional[AuditLogger] = None,
-        state_dir: Optional[Path] = None,
+        adapter: ContainerRuntimeAdapter | None = None,
+        audit_logger: AuditLogger | None = None,
+        state_dir: Path | None = None,
     ) -> None:
         if adapter:
             self._adapter = adapter
@@ -75,20 +78,21 @@ class SessionManager:
             self._adapter = get_adapter_registry().get_container_adapter()
         else:
             from isolated_agents_sdk.adapters.container.podman import PodmanAdapter
+
             self._adapter = PodmanAdapter()
 
         self._audit_logger = audit_logger or AuditLogger()
         self.state_dir = state_dir
         if self.state_dir:
             self.state_dir.mkdir(parents=True, exist_ok=True)
-            
+
         self._lock = threading.Lock()
         # session_id -> _SessionEntry
         self._registry: dict[str, _SessionEntry] = {}
         # Guard so atexit/signal handlers are registered only once
         self._handlers_registered: bool = False
-        self._reaper_task: Optional[asyncio.Task] = None
-        
+        self._reaper_task: asyncio.Task | None = None
+
         # Load existing durable sessions if state_dir is provided
         if self.state_dir:
             self._load_durable_sessions()
@@ -102,10 +106,10 @@ class SessionManager:
         session_id: str,
         container_id: str,
         agent_id: str,
-        process: Optional[object],
+        process: object | None,
         policy: Policy,
-        audit_logger: Optional[AuditLogger] = None,
-        parent_session_id: Optional[str] = None,
+        audit_logger: AuditLogger | None = None,
+        parent_session_id: str | None = None,
     ) -> None:
         """Register a new active session and start background monitoring tasks.
 
@@ -122,34 +126,36 @@ class SessionManager:
             session_id=session_id,
             container_id=container_id,
             agent_id=agent_id,
-            started_at=datetime.now(timezone.utc).isoformat(),
+            started_at=datetime.now(UTC).isoformat(),
             status="running",
         )
         entry = _SessionEntry(
-            info=info, 
-            process=process, 
-            policy=policy, 
+            info=info,
+            process=process,
+            policy=policy,
             audit_logger=audit_logger,
             parent_session_id=parent_session_id,
             allocated_cpu=policy.cpu_cores,
             allocated_memory=policy.memory_mb,
             subtree_cpu_budget=policy.cpu_cores,
-            subtree_memory_budget=policy.memory_mb
+            subtree_memory_budget=policy.memory_mb,
         )
 
         with self._lock:
             if parent_session_id in self._registry:
                 parent = self._registry[parent_session_id]
                 # Registering a child: update parent's sub_sessions list
-                parent.info.sub_sessions.append(SubSessionInfo(
-                    sub_session_id=session_id,
-                    parent_session_id=parent_session_id,
-                    container_id=container_id,
-                    agent_id=agent_id,
-                    started_at=info.started_at,
-                    status="running",
-                    nesting_depth=getattr(parent.info, "nesting_depth", 0) + 1
-                ))
+                parent.info.sub_sessions.append(
+                    SubSessionInfo(
+                        sub_session_id=session_id,
+                        parent_session_id=parent_session_id,
+                        container_id=container_id,
+                        agent_id=agent_id,
+                        started_at=info.started_at,
+                        status="running",
+                        nesting_depth=getattr(parent.info, "nesting_depth", 0) + 1,
+                    )
+                )
                 # Update resource tracking in parent
                 parent.consumed_cpu_by_children += entry.allocated_cpu
                 parent.consumed_memory_by_children += entry.allocated_memory
@@ -158,7 +164,7 @@ class SessionManager:
             if not self._handlers_registered:
                 self._register_handlers()
                 self._handlers_registered = True
-            
+
             if policy.durable and self.state_dir:
                 self._save_session_state(session_id)
 
@@ -177,35 +183,44 @@ class SessionManager:
             entry = self._registry.get(session_id)
             if not entry:
                 return {"cpu": 0.0, "memory": 0}
-            
+
             return {
-                "cpu": max(0.0, entry.subtree_cpu_budget - entry.allocated_cpu - entry.consumed_cpu_by_children),
-                "memory": max(0, entry.subtree_memory_budget - entry.allocated_memory - entry.consumed_memory_by_children)
+                "cpu": max(
+                    0.0,
+                    entry.subtree_cpu_budget - entry.allocated_cpu - entry.consumed_cpu_by_children,
+                ),
+                "memory": max(
+                    0,
+                    entry.subtree_memory_budget
+                    - entry.allocated_memory
+                    - entry.consumed_memory_by_children,
+                ),
             }
 
     def _save_session_state(self, session_id: str) -> None:
         """Persist session metadata to disk for durable execution."""
         if not self.state_dir:
             return
-            
+
         entry = self._registry.get(session_id)
         if not entry:
             return
-            
+
         state_file = self.state_dir / f"{session_id}.json"
-        
+
         # Determine how to serialise info (Pydantic vs Dataclass)
         if hasattr(entry.info, "model_dump"):
             info_dict = entry.info.model_dump()
         else:
             from dataclasses import asdict
+
             info_dict = asdict(entry.info)
 
         state = {
             "info": info_dict,
             "policy": entry.policy._to_dict(),
         }
-        
+
         try:
             with open(state_file, "w") as f:
                 json.dump(state, f, indent=2)
@@ -216,39 +231,43 @@ class SessionManager:
         """Reload sessions marked as durable from the state directory."""
         if not self.state_dir:
             return
-            
+
         for state_file in self.state_dir.glob("*.json"):
             try:
-                with open(state_file, "r") as f:
+                with open(state_file) as f:
                     state = json.load(f)
-                
+
                 # Reconstruct SessionInfo and Policy
                 info_data = state["info"]
-                
+
                 # Use model_validate for Pydantic or direct construction for dataclasses
                 if hasattr(SessionInfo, "model_validate"):
                     info = SessionInfo.model_validate(info_data)
                 else:
                     # Legacy fallback
                     if "sub_sessions" in info_data:
-                         info_data["sub_sessions"] = [SubSessionInfo(**s) for s in info_data["sub_sessions"]]
+                        info_data["sub_sessions"] = [
+                            SubSessionInfo(**s) for s in info_data["sub_sessions"]
+                        ]
                     info = SessionInfo(**info_data)
 
                 policy = Policy._from_dict(state["policy"])
-                
+
                 # Note: Process handle is lost on restart, but container might still be running.
                 # In v0.2.0, we mark it as 'stale' or try to re-attach if possible.
                 # For now, we load it into the registry.
                 entry = _SessionEntry(info=info, process=None, policy=policy)
                 self._registry[info.session_id] = entry
-                
+
                 logger.info(f"Recovered durable session: {info.session_id}")
             except Exception as e:
                 logger.error(f"Failed to load session state from {state_file}: {e}")
 
-    async def complete_session(self, session_id: str, exit_code: int, error: Optional[str] = None) -> None:
+    async def complete_session(
+        self, session_id: str, exit_code: int, error: str | None = None
+    ) -> None:
         """Mark a session as completed or failed and destroy its container."""
-        
+
         # 1. Implementation cascading teardown (v0.2.1 Hardening)
         # Find all children in the registry that claim this session as parent
         # and terminate them recursively to avoid orphan containers.
@@ -257,12 +276,12 @@ class SessionManager:
             for sid, entry_other in self._registry.items():
                 if entry_other.parent_session_id == session_id:
                     children_to_kill.append(sid)
-        
+
         for child_sid in children_to_kill:
             await self.complete_session(
-                child_sid, 
-                exit_code=1, 
-                error=f"Teardown triggered by parent session {session_id} termination."
+                child_sid,
+                exit_code=1,
+                error=f"Teardown triggered by parent session {session_id} termination.",
             )
 
         with self._lock:
@@ -275,24 +294,24 @@ class SessionManager:
             agent_id = entry.info.agent_id
             audit_logger = entry.audit_logger or self._audit_logger
             del self._registry[session_id]
-            
+
             # Remove persistent state if it exists
             if self.state_dir:
                 state_file = self.state_dir / f"{session_id}.json"
                 if state_file.exists():
-                    try:
+                    with contextlib.suppress(OSError):
                         state_file.unlink()
-                    except OSError:
-                        pass
 
-        await self.destroy_container_async(container_id, session_id, agent_id, audit_logger=audit_logger)
+        await self.destroy_container_async(
+            container_id, session_id, agent_id, audit_logger=audit_logger
+        )
 
     def list_sessions(self) -> list[SessionInfo]:
         """Return a snapshot of all currently active :class:`SessionInfo` objects."""
         with self._lock:
             return [entry.info for entry in self._registry.values()]
 
-    def get_session_policy(self, session_id: str) -> Optional[Policy]:
+    def get_session_policy(self, session_id: str) -> Policy | None:
         """Get the policy configured for an active session."""
         with self._lock:
             entry = self._registry.get(session_id)
@@ -368,13 +387,11 @@ class SessionManager:
         container_id: str,
         session_id: str = "",
         agent_id: str = "",
-        audit_logger: Optional[AuditLogger] = None,
+        audit_logger: AuditLogger | None = None,
     ) -> None:
         """Forcefully remove a container asynchronously."""
-        try:
+        with contextlib.suppress(Exception):
             await self._adapter.destroy_container(container_id, force=True)
-        except Exception:
-            pass
 
         audit_logger = audit_logger or self._audit_logger
         if audit_logger.enabled:
@@ -390,7 +407,7 @@ class SessionManager:
         container_id: str,
         session_id: str = "",
         agent_id: str = "",
-        audit_logger: Optional[AuditLogger] = None,
+        audit_logger: AuditLogger | None = None,
     ) -> None:
         """Forcefully remove a container synchronously (atexit fallback)."""
         if self._adapter:
@@ -407,12 +424,13 @@ class SessionManager:
         audit_logger = audit_logger or self._audit_logger
         if not audit_logger.enabled:
             return
-            
+
         try:
             import json
+
             entry = {
                 "event_type": "container_destroyed",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "session_id": session_id,
                 "agent_id": agent_id,
                 "payload": {"container_id": container_id, "mode": "sync_atexit"},
@@ -433,19 +451,19 @@ class SessionManager:
 
     async def _timeout_session(self, session_id: str, timeout_seconds: int) -> None:
         """Called when a session exceeds its limit."""
-        
+
         # Cascading teardown for children on timeout
         children_to_kill = []
         with self._lock:
             for sid, entry_other in self._registry.items():
                 if entry_other.parent_session_id == session_id:
                     children_to_kill.append(sid)
-        
+
         for child_sid in children_to_kill:
             await self.complete_session(
-                child_sid, 
-                exit_code=1, 
-                error=f"Teardown triggered by parent session {session_id} timeout."
+                child_sid,
+                exit_code=1,
+                error=f"Teardown triggered by parent session {session_id} timeout.",
             )
 
         with self._lock:
@@ -463,7 +481,7 @@ class SessionManager:
         # Kill the agent process if it is still alive
         if process is not None:
             try:
-                if hasattr(process, 'kill'):
+                if hasattr(process, "kill"):
                     if asyncio.iscoroutinefunction(process.kill):
                         await process.kill()
                     else:
@@ -489,29 +507,33 @@ class SessionManager:
         """Main background loop that monitors all sessions for timeouts and resource limits."""
         while True:
             await asyncio.sleep(1.0)
-            
-            now = datetime.now(timezone.utc)
+
+            now = datetime.now(UTC)
             with self._lock:
                 session_ids = list(self._registry.keys())
-            
+
             for sid in session_ids:
                 with self._lock:
                     entry = self._registry.get(sid)
-                
+
                 if not entry or entry.info.status != "running":
                     continue
-                
+
                 # 1. Timeout Check
                 if entry.policy.timeout_seconds:
                     started_at = datetime.fromisoformat(entry.info.started_at)
                     if (now - started_at).total_seconds() >= entry.policy.timeout_seconds:
-                        logger.warning(f"Session {sid} timed out after {entry.policy.timeout_seconds}s")
+                        logger.warning(
+                            f"Session {sid} timed out after {entry.policy.timeout_seconds}s"
+                        )
                         await self._timeout_session(sid, entry.policy.timeout_seconds)
                         continue
 
                 # 2. Resource Polling Check
                 if entry.policy.resource_monitor_interval > 0:
-                    last_poll = entry.last_resource_poll or datetime.fromisoformat(entry.info.started_at)
+                    last_poll = entry.last_resource_poll or datetime.fromisoformat(
+                        entry.info.started_at
+                    )
                     if (now - last_poll).total_seconds() >= entry.policy.resource_monitor_interval:
                         entry.last_resource_poll = now
                         # Fire and forget the poll so we don't block the reaper for other sessions
@@ -597,6 +619,7 @@ class SessionManager:
 # IsolatedSession — async context manager for single-session lifecycle
 # ---------------------------------------------------------------------------
 
+
 class IsolatedSession:
     """Async context manager that owns the full lifecycle of one agent session."""
 
@@ -613,7 +636,7 @@ class IsolatedSession:
         self._host_output_path = host_output_path
         self._result = None
 
-    async def __aenter__(self) -> "IsolatedSession":
+    async def __aenter__(self) -> IsolatedSession:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
