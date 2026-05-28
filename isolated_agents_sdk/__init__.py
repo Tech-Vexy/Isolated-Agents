@@ -81,6 +81,9 @@ from isolated_agents_sdk.decorators import (
     selenium,
 )
 
+# Simplified Agent API
+from isolated_agents_sdk.agent import Agent, agent as agent_decorator
+
 # Composability API
 from isolated_agents_sdk.composability import chain, parallel, StateGraph
 
@@ -329,12 +332,10 @@ async def async_run_agent(
 
     # Handle Sub-Agent Spawn Socket if enabled but no path provided (Host-initiated)
     if validated_policy.allow_sub_agents and not spawn_socket_path:
-        from isolated_agents_sdk.runtime import get_runtime
-        runtime = get_runtime(working_dir=working_dir)
+        from isolated_agents_sdk.runtime import get_runtime_async
+        runtime = await get_runtime_async(working_dir=working_dir)
         if not runtime._is_running:
             await runtime.start()
-        # Note: we use internal _create_session_socket. 
-        # In a real SDK we might make this a public part of the Runtime API.
         spawn_socket_path = await runtime._create_session_socket(session_id)
 
     if validated_policy.entrypoint:
@@ -685,6 +686,10 @@ __all__ = [
     "run_agent",
     "async_run_agent",
     "start_agent_daemon",
+    # Simplified Agent API
+    "Agent",
+    "agent_decorator",
+    # Decorators
     "isolated_agent",
     "policy",
     "network",
@@ -710,11 +715,16 @@ __all__ = [
     "SessionMetrics",
     "AuditEvent",
     # Exceptions
+    "IsolatedAgentsError",
     "PodmanNotFoundError",
     "PolicyValidationError",
     "WorkingDirectoryError",
     "OutputSizeLimitError",
     "ContainerError",
+    "NetworkAccessDeniedError",
+    "PackageInstallationError",
+    "ResourceLimitExceededError",
+    "AgentImportError",
     # Components (for advanced use)
     "PolicyValidator",
     "AuditLogger",

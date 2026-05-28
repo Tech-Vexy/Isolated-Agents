@@ -26,13 +26,19 @@ from isolated_agents_sdk.models import (
     CONTAINER_SOURCE_PATH,
 )
 
+# Container-internal paths used during execution
+_CONTAINER_SITE_PACKAGES = "/tmp/site-packages"
+_CONTAINER_SECRETS_PATH = "/run/secrets/credentials.env"
+_CONTAINER_CA_CERT_PATH = "/usr/local/share/ca-certificates/proxy-ca.crt"
+
 logger = logging.getLogger(__name__)
 
 # Detect if adapters are available
 try:
-    from isolated_agents_sdk.adapters.registry import get_adapter_registry
+    from isolated_agents_sdk.adapters.registry import get_registry as _get_adapter_registry
     _ADAPTERS_AVAILABLE = True
 except ImportError:
+    _get_adapter_registry = None  # type: ignore[assignment]
     _ADAPTERS_AVAILABLE = False
 
 # Bootstrap script — injected source is loaded via cloudpickle.
@@ -112,8 +118,8 @@ class AgentRunner:
         self._handle = handle
         if adapter:
             self._adapter = adapter
-        elif _ADAPTERS_AVAILABLE:
-            self._adapter = get_adapter_registry().get_container_adapter()
+        elif _ADAPTERS_AVAILABLE and _get_adapter_registry is not None:
+            self._adapter = _get_adapter_registry().get_container_adapter()
         else:
             from isolated_agents_sdk.adapters.container.podman import PodmanAdapter
             self._adapter = PodmanAdapter()
@@ -123,6 +129,131 @@ class AgentRunner:
     # ------------------------------------------------------------------
     # Public interface
     # ------------------------------------------------------------------
+
+    async def _prepare_execution(
+        self,
+        agent: Optional[Callable],
+        policy: Policy,
+        session_id: str,
+        container_id: str,
+        agent_args: tuple,
+        agent_kwargs: dict,
+        agent_payload_hex: Optional[str],
+        spawn_socket_path: Optional[str],
+    ) -> tuple[list[str], dict[str, str]]:
+        """Prepare the command and environment for agent execution.
+
+        Handles SDK injection, source serialisation, pip installs, and
+        builds the final command list and env dict.
+
+        Returns:
+            (command, env) ready to pass to exec_in_container.
+        """
+        # Sub-agent socket setup
+        if policy.allow_sub_agents:
+            await self._setup_spawn_daemon(container_id, spawn_socket_path=spawn_socket_path)
+            import isolated_agents_sdk as _sdk
+            _pkg_path = Path(_sdk.__file__).parent
+            try:
+                await self._adapter.copy_to_container(
+                    container_id, str(_pkg_path),
+                    str(Path(INTERNAL_BASE_PATH) / "isolated_agents_sdk"),
+                )
+            except Exception as e:
+                logger.error("Failed to inject SDK into container: %s", e)
+
+        env: dict[str, str] = {}
+        if policy.allow_sub_agents:
+            from isolated_agents_sdk.models import CONTAINER_SPAWN_SOCKET_PATH
+            env["ISOLATED_AGENTS_SPAWN_SOCKET"] = CONTAINER_SPAWN_SOCKET_PATH
+            env["PYTHONPATH"] = f"{INTERNAL_BASE_PATH}:{env.get('PYTHONPATH', '')}".strip(":")
+            env["ISOLATED_AGENTS_SESSION_ID"] = session_id
+
+        if policy.proxy_url:
+            env.update({
+                "HTTP_PROXY": policy.proxy_url,
+                "HTTPS_PROXY": policy.proxy_url,
+                "http_proxy": policy.proxy_url,
+                "https_proxy": policy.proxy_url,
+            })
+            if policy.network.grpc:
+                env["GRPC_PROXY"] = policy.proxy_url
+                env["grpc_proxy"] = policy.proxy_url
+
+        if policy.entrypoint:
+            command = self._build_entrypoint_command(policy)
+        else:
+            command = await self._build_python_command(
+                agent, policy, container_id, agent_args, agent_kwargs,
+                agent_payload_hex, env,
+            )
+
+        return command, env
+
+    def _build_entrypoint_command(self, policy: Policy) -> list[str]:
+        """Build the shell command for entrypoint (framework-agnostic) mode."""
+        if policy.requires_display:
+            xvfb = "Xvfb :99 -screen 0 1280x1024x24 & export DISPLAY=:99 && sleep 1 && "
+            secret = "if [ -f /run/secrets/credentials.env ]; then set -a; . /run/secrets/credentials.env; set +a; fi && "
+            return ["sh", "-c", xvfb + secret + " ".join(policy.entrypoint)]  # type: ignore[arg-type]
+        return list(policy.entrypoint)  # type: ignore[arg-type]
+
+    async def _build_python_command(
+        self,
+        agent: Optional[Callable],
+        policy: Policy,
+        container_id: str,
+        agent_args: tuple,
+        agent_kwargs: dict,
+        agent_payload_hex: Optional[str],
+        env: dict[str, str],
+    ) -> list[str]:
+        """Serialise agent, install deps, and return the bootstrap command."""
+        if agent is None and agent_payload_hex is None:
+            raise ValueError("Agent callable must be provided if policy.entrypoint is not set.")
+
+        await self._inject_source(
+            agent=agent,
+            container_id=container_id,
+            agent_args=agent_args,
+            agent_kwargs=agent_kwargs,
+            agent_payload_hex=agent_payload_hex,
+        )
+        await self._inject_bootstrap(container_id)
+
+        packages_to_install = list(policy.pip_packages)
+        should_inject_cloudpickle = False
+        if "cloudpickle" not in [p.split("==")[0].split(">=")[0].strip() for p in packages_to_install]:
+            if policy.pip_require_hashes:
+                should_inject_cloudpickle = True
+            else:
+                packages_to_install.append("cloudpickle")
+
+        if should_inject_cloudpickle:
+            import cloudpickle as _cp
+            cp_path = Path(_cp.__file__).parent
+            try:
+                await self._adapter.copy_to_container(
+                    container_id, str(cp_path),
+                    str(Path(INTERNAL_BASE_PATH) / "cloudpickle"),
+                )
+                env["PYTHONPATH"] = f"{INTERNAL_BASE_PATH}:{env.get('PYTHONPATH', '')}".strip(":")
+            except Exception as e:
+                logger.error("Failed to inject cloudpickle from host: %s", e)
+
+        await self._install_pip_packages(
+            container_id=container_id,
+            packages=packages_to_install,
+            index_url=policy.pip_index_url,
+            require_hashes=policy.pip_require_hashes,
+        )
+
+        env["PYTHONPATH"] = f"{_CONTAINER_SITE_PACKAGES}:{env.get('PYTHONPATH', '')}".strip(":")
+
+        if policy.requires_display:
+            xvfb = "Xvfb :99 -screen 0 1280x1024x24 & export DISPLAY=:99 && sleep 1 && "
+            return ["sh", "-c", xvfb + f"python3 {CONTAINER_BOOTSTRAP_PATH}"]
+        return ["python3", CONTAINER_BOOTSTRAP_PATH]
 
     async def run(
         self,
@@ -162,7 +293,7 @@ class AgentRunner:
             agent_kwargs = {}
         container_id = self._handle.container_id
 
-        # 0. v0.2.0: Register sensitive patterns from policy for log masking
+        # 0. Register sensitive patterns from policy for log masking
         if policy.sensitive_env_vars:
             add_global_sensitive_patterns(policy.sensitive_env_vars)
 
@@ -174,113 +305,23 @@ class AgentRunner:
         if policy.proxy_ca_cert:
             await self._inject_ca_cert(container_id, policy.proxy_ca_cert)
 
-        # 3. Handle Sub-Agent Spawn Socket if enabled
-        if policy.allow_sub_agents:
-            await self._setup_spawn_daemon(container_id, spawn_socket_path=spawn_socket_path)
-            
-            # Inject SDK package so container can 'import isolated_agents_sdk'
-            # (required for sub-agent client and database connectivity)
-            import isolated_agents_sdk as _sdk
-            _pkg_path = Path(_sdk.__file__).parent
-            try:
-                await self._adapter.copy_to_container(container_id, str(_pkg_path), f"{INTERNAL_BASE_PATH}/isolated_agents_sdk")
-            except Exception as e:
-                logger.error(f"Failed to inject SDK into container: {e}")
-
-        env = {}
-        if policy.allow_sub_agents:
-            from isolated_agents_sdk.models import CONTAINER_SPAWN_SOCKET_PATH
-            env["ISOLATED_AGENTS_SPAWN_SOCKET"] = CONTAINER_SPAWN_SOCKET_PATH
-            # Ensure the injected SDK is in PYTHONPATH
-            env["PYTHONPATH"] = f"{INTERNAL_BASE_PATH}:{env.get('PYTHONPATH', '')}".strip(":")
-            env["ISOLATED_AGENTS_SESSION_ID"] = session_id
-
-        if policy.proxy_url:
-            env.update({
-                "HTTP_PROXY": policy.proxy_url,
-                "HTTPS_PROXY": policy.proxy_url,
-                "http_proxy": policy.proxy_url,
-                "https_proxy": policy.proxy_url,
-            })
-            if policy.network.grpc:
-                env["GRPC_PROXY"] = policy.proxy_url
-                env["grpc_proxy"] = policy.proxy_url
-
-        if policy.entrypoint:
-            # Framework-Agnostic Mode: Execute the user's command
-            if policy.requires_display:
-                # Wrap with Xvfb
-                xvfb_cmd = "Xvfb :99 -screen 0 1280x1024x24 & export DISPLAY=:99 && sleep 1 && "
-                # Source secrets if they exist for polyglot agents too
-                secret_cmd = "if [ -f /run/secrets/credentials.env ]; then set -a; . /run/secrets/credentials.env; set +a; fi && "
-                final_cmd = xvfb_cmd + secret_cmd + " ".join(policy.entrypoint)
-                command = ["sh", "-c", final_cmd]
-            else:
-                command = policy.entrypoint
-        else:
-            if agent is None and agent_payload_hex is None:
-                # v0.2.1: Updated error message for consistency with polyglot tests.
-                raise ValueError("Agent callable must be provided if policy.entrypoint is not set.")
-
-            # Legacy Python Callable Mode
-            # 1. Serialise agent and copy it into the container
-            await self._inject_source(
-                agent=agent, 
-                container_id=container_id, 
-                agent_args=agent_args, 
-                agent_kwargs=agent_kwargs,
-                agent_payload_hex=agent_payload_hex
-            )
-
-            # 2. Write and copy the bootstrap script into the container
-            await self._inject_bootstrap(container_id)
-
-            # 3. Install any agent-requested packages inside the container
-            # We always need cloudpickle for the bootstrap script to work.
-            # If pip_require_hashes is enabled, we cannot dynamically add 
-            # "cloudpickle" to the list because pip will fail on the missing hash.
-            # In that case, we inject it directly from the host.
-            packages_to_install = list(policy.pip_packages)
-            should_inject_cloudpickle = False
-            
-            if "cloudpickle" not in [p.split("==")[0].split(">=")[0].strip() for p in packages_to_install]:
-                if policy.pip_require_hashes:
-                    should_inject_cloudpickle = True
-                else:
-                    packages_to_install.append("cloudpickle")
-
-            if should_inject_cloudpickle:
-                import cloudpickle
-                cp_path = Path(cloudpickle.__file__).parent
-                try:
-                    # Copy host cloudpickle to the hidden internal tmpfs
-                    await self._adapter.copy_to_container(container_id, str(cp_path), f"{INTERNAL_BASE_PATH}/cloudpickle")
-                    # Ensure it's in PYTHONPATH
-                    env["PYTHONPATH"] = f"{INTERNAL_BASE_PATH}:{env.get('PYTHONPATH', '')}".strip(":")
-                except Exception as e:
-                    logger.error(f"Failed to inject cloudpickle from host (required for hash-strict policy): {e}")
-
-            await self._install_pip_packages(
-                container_id=container_id,
-                packages=packages_to_install,
-                index_url=policy.pip_index_url,
-                require_hashes=policy.pip_require_hashes,
-            )
-
-            if policy.requires_display:
-                xvfb_cmd = "Xvfb :99 -screen 0 1280x1024x24 & export DISPLAY=:99 && sleep 1 && "
-                final_cmd = xvfb_cmd + f"python3 {CONTAINER_BOOTSTRAP_PATH}"
-                command = ["sh", "-c", final_cmd]
-            else:
-                command = ["python3", CONTAINER_BOOTSTRAP_PATH]
-            
-            # Ensure the installed packages are in PYTHONPATH
-            env["PYTHONPATH"] = f"/tmp/site-packages:{env.get('PYTHONPATH', '')}".strip(":")
+        # 3. Build command and environment
+        command, env = await self._prepare_execution(
+            agent=agent,
+            policy=policy,
+            session_id=session_id,
+            container_id=container_id,
+            agent_args=agent_args,
+            agent_kwargs=agent_kwargs,
+            agent_payload_hex=agent_payload_hex,
+            spawn_socket_path=spawn_socket_path,
+        )
 
         # 4. Launch the agent via the adapter with optional retries
         attempts = 0
         max_attempts = policy.retry_count + 1
         exec_result = None
+        exit_code = 1  # default; overwritten by exec_result below
 
         while attempts < max_attempts:
             attempts += 1
@@ -425,7 +466,7 @@ class AgentRunner:
             tmp.write(content)
             tmp_path = tmp.name
         try:
-            await self._adapter.copy_to_container(container_id, tmp_path, "/run/secrets/credentials.env")
+            await self._adapter.copy_to_container(container_id, tmp_path, _CONTAINER_SECRETS_PATH)
         finally:
             Path(tmp_path).unlink(missing_ok=True)
 
@@ -435,7 +476,7 @@ class AgentRunner:
             tmp.write(cert_content)
             tmp_path = tmp.name
         try:
-            await self._adapter.copy_to_container(container_id, tmp_path, "/usr/local/share/ca-certificates/proxy-ca.crt")
+            await self._adapter.copy_to_container(container_id, tmp_path, _CONTAINER_CA_CERT_PATH)
             await self._adapter.exec_in_container(container_id, ["update-ca-certificates"])
         finally:
             Path(tmp_path).unlink(missing_ok=True)
@@ -472,9 +513,9 @@ class AgentRunner:
         # Install to /tmp/site-packages because rootfs might be read-only.
         # Set HOME=/tmp to avoid pip trying to write to /root.
         pip_cmd = [
-            "python3", "-m", "pip", "install", 
-            "--no-cache-dir", 
-            "--target", "/tmp/site-packages",
+            "python3", "-m", "pip", "install",
+            "--no-cache-dir",
+            "--target", _CONTAINER_SITE_PACKAGES,
             "--retries", "10",
             "--default-timeout", "180"
         ]

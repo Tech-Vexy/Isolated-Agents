@@ -7,13 +7,18 @@ sub-agents by communicating with the host-side Spawn Daemon.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import socket
 from typing import Any, Optional, Dict
 
 from isolated_agents_sdk.models import AgentResult, Policy
 
+logger = logging.getLogger(__name__)
+
 _global_client: Optional[SubAgentClient] = None
+_DEFAULT_SOCKET_TIMEOUT = 30.0  # seconds
+
 
 def init_sub_agent_client(socket_path: str) -> None:
     """Initialize the global sub-agent client inside the container."""
@@ -21,8 +26,8 @@ def init_sub_agent_client(socket_path: str) -> None:
     _global_client = SubAgentClient(socket_path)
 
 
-def _init_if_needed() -> None:
-    """Initialize the global client from environment if not already set."""
+def _get_client() -> SubAgentClient:
+    """Return the global client, initialising it from the environment if needed."""
     global _global_client
     if _global_client is None:
         socket_path = os.environ.get("ISOLATED_AGENTS_SPAWN_SOCKET")
@@ -31,6 +36,8 @@ def _init_if_needed() -> None:
                 "Sub-Agent Client not initialized and ISOLATED_AGENTS_SPAWN_SOCKET env var not found."
             )
         _global_client = SubAgentClient(socket_path)
+    return _global_client
+
 
 def spawn_sub_agent(
     agent: Optional[Any] = None,
@@ -38,76 +45,54 @@ def spawn_sub_agent(
     args: tuple = (),
     kwargs: Optional[Dict[str, Any]] = None,
 ) -> AgentResult:
-    """Spawn a sub-agent from within an isolated environment.
-    
-    This function communicates with the host-side Spawn Daemon to launch
-     a new isolated container.
-    """
-    _init_if_needed()
-    return _global_client.spawn(agent, policy, args, kwargs)
+    """Spawn a sub-agent from within an isolated environment."""
+    return _get_client().spawn(agent, policy, args, kwargs)
+
 
 def save_checkpoint(data: Any) -> bool:
-    """Save a checkpoint of the current agent state to the host.
-    
-    This allows the agent to be resumed from this state if it fails or 
-    the system restarts (Durable Execution).
-    """
+    """Save a checkpoint of the current agent state to the host."""
     try:
-        _init_if_needed()
-        return _global_client.save_checkpoint(data)
+        return _get_client().save_checkpoint(data)
     except Exception:
         return False
+
 
 def load_checkpoint() -> Optional[Any]:
     """Retrieve the last saved checkpoint for this session."""
     try:
-        _init_if_needed()
-        return _global_client.load_checkpoint()
+        return _get_client().load_checkpoint()
     except Exception:
         return None
 
+
 def db_query(db_id: str, query: str, **params) -> list[dict[str, Any]]:
-    """Query a host-mediated database.
-    
-    Args:
-        db_id: Logical name of the database (must be in policy.database_access)
-        query: SQL or NoSQL query string
-        **params: Query parameters
-        
-    Returns:
-        List of result rows/documents
-    """
-    _init_if_needed()
-    return _global_client.db_query(db_id, query, **params)
+    """Query a host-mediated database."""
+    return _get_client().db_query(db_id, query, **params)
+
 
 def db_execute(db_id: str, query: str, **params) -> int:
-    """Execute a statement on a host-mediated database.
-    
-    Args:
-        db_id: Logical name of the database
-        query: Statement to execute
-        **params: Parameters
-        
-    Returns:
-        Number of rows affected
-    """
-    _init_if_needed()
-    return _global_client.db_execute(db_id, query, **params)
+    """Execute a statement on a host-mediated database."""
+    return _get_client().db_execute(db_id, query, **params)
+
 
 def db_get(db_id: str, key: str, collection: Optional[str] = None) -> Optional[Any]:
     """Get a document from a host-mediated NoSQL database."""
-    _init_if_needed()
-    return _global_client.db_get(db_id, key, collection)
+    return _get_client().db_get(db_id, key, collection)
+
 
 def db_set(db_id: str, key: str, value: Any, collection: Optional[str] = None) -> None:
     """Set a document in a host-mediated NoSQL database."""
-    _init_if_needed()
-    return _global_client.db_set(db_id, key, value, collection)
+    _get_client().db_set(db_id, key, value, collection)
 
-def db_vector_search(db_id: str, query_vector: list[float], limit: int = 5, collection: Optional[str] = None) -> list[dict[str, Any]]:
+
+def db_vector_search(
+    db_id: str,
+    query_vector: list[float],
+    limit: int = 5,
+    collection: Optional[str] = None,
+) -> list[dict[str, Any]]:
     """Perform a vector search on a host-mediated vector database."""
-    _init_if_needed()
-    return _global_client.db_vector_search(db_id, query_vector, limit, collection)
+    return _get_client().db_vector_search(db_id, query_vector, limit, collection)
 
 class SubAgentClient:
     """Client for the Spawn Daemon IPC interface."""
@@ -115,11 +100,14 @@ class SubAgentClient:
     def __init__(self, socket_path: str) -> None:
         self.socket_path = socket_path
 
-    def _send_request(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """Send a request to the Spawn Daemon using length-prefixed framing (v0.2.1)."""
+    def _send_request(self, payload: dict[str, Any], timeout: float = _DEFAULT_SOCKET_TIMEOUT) -> dict[str, Any]:
+        """Send a request to the Spawn Daemon using length-prefixed framing."""
         import struct
+        if not hasattr(socket, "AF_UNIX"):
+            return {"status": "error", "error": "Unix domain sockets are not supported on this platform"}
         try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:  # pylint: disable=no-member
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:  # type: ignore[attr-defined]
+                sock.settimeout(timeout)
                 sock.connect(self.socket_path)
                 
                 # 1. Encode payload
@@ -186,7 +174,7 @@ class SubAgentClient:
                 output=response.get("error", "Failed to initiate spawn")
             )
             
-        target_session_id = response.get("session_id")
+        target_session_id: str = response.get("session_id") or "unknown"
         
         # 2. Wait for result (Resilient to disconnects)
         # We can retry heartbeats here if we want, but for now just one wait call
@@ -202,7 +190,7 @@ class SubAgentClient:
             return AgentResult(
                 exit_code=wait_response.get("exit_code", 0),
                 artifacts=wait_response.get("artifacts", {}),
-                session_id=wait_response.get("session_id"),
+                session_id=str(wait_response.get("session_id") or target_session_id),
                 output=wait_response.get("output")
             )
         else:
@@ -245,7 +233,8 @@ class SubAgentClient:
         if response.get("status") == "success" and "data_payload" in response:
             try:
                 return cloudpickle.loads(bytes.fromhex(response["data_payload"]))
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to deserialize checkpoint: %s", e)
                 return None
         return None
 

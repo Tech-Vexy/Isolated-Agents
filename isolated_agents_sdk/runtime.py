@@ -9,12 +9,27 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import socket
 import struct
-import tempfile
 import uuid
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
+
+_SESSION_ID_RE = re.compile(r'^[0-9a-f\-]{36}$')
+
+
+def _safe_session_path(base: Path, session_id: str, suffix: str) -> Path:
+    """Return a path under base for session_id, raising if session_id is not a valid UUID."""
+    if not _SESSION_ID_RE.match(session_id):
+        raise ValueError(f"Invalid session_id format: {session_id!r}")
+    base_resolved = base.resolve()
+    resolved = (base_resolved / f"{session_id}{suffix}").resolve()
+    try:
+        resolved.relative_to(base_resolved)
+    except ValueError:
+        raise ValueError(f"Path traversal detected for session_id: {session_id!r}")
+    return resolved
 
 from isolated_agents_sdk.agent_runner import AgentRunner
 from isolated_agents_sdk.audit_logger import AuditLogger
@@ -25,14 +40,44 @@ from isolated_agents_sdk.logging import get_logger
 
 logger = get_logger("runtime")
 
-_GLOBAL_RUNTIME: Optional[AgentRuntime] = None
+class _RuntimeRegistry:
+    """Encapsulates the global AgentRuntime singleton to avoid bare module-level mutation."""
+
+    def __init__(self) -> None:
+        self._instance: Optional[AgentRuntime] = None
+        self._lock: Optional[asyncio.Lock] = None
+
+    def _get_lock(self) -> asyncio.Lock:
+        # Lock must be created lazily inside a running event loop.
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    async def get_async(self, working_dir: Optional[str | Path] = None) -> AgentRuntime:
+        """Get or create the singleton (async, race-safe)."""
+        async with self._get_lock():
+            if self._instance is None:
+                self._instance = AgentRuntime(working_dir=working_dir or "./runtime_workspace")
+            return self._instance
+
+    def get_sync(self, working_dir: Optional[str | Path] = None) -> AgentRuntime:
+        """Get or create the singleton (sync, best-effort for non-async callers)."""
+        if self._instance is None:
+            self._instance = AgentRuntime(working_dir=working_dir or "./runtime_workspace")
+        return self._instance
+
+
+_runtime_registry = _RuntimeRegistry()
+
+
+async def get_runtime_async(working_dir: Optional[str | Path] = None) -> AgentRuntime:
+    """Get or create the global AgentRuntime instance (async, thread-safe)."""
+    return await _runtime_registry.get_async(working_dir)
+
 
 def get_runtime(working_dir: Optional[str | Path] = None) -> AgentRuntime:
-    """Get or create the global AgentRuntime instance."""
-    global _GLOBAL_RUNTIME
-    if _GLOBAL_RUNTIME is None:
-        _GLOBAL_RUNTIME = AgentRuntime(working_dir=working_dir or "./runtime_workspace")
-    return _GLOBAL_RUNTIME
+    """Get or create the global AgentRuntime instance (sync, best-effort)."""
+    return _runtime_registry.get_sync(working_dir)
 
 class AgentRuntime:
     """Unified runtime for managing isolated agents.
@@ -153,14 +198,12 @@ class AgentRuntime:
         finally:
             await self._close_session_socket(session_id)
 
-    async def _create_session_socket(self, session_id: str) -> str:
+    async def _create_session_socket(self, session_id: str) -> Optional[str]:
         """Create a dedicated IPC socket for a specific session."""
         if os.name == 'nt':
-            # On Windows, we still don't have a clean way for untrusted containers 
-            # to talk to host via UDS in a cross-platform manner without complex setup.
             return None
 
-        socket_path_obj = self.working_dir / "sockets" / f"{session_id}.sock"
+        socket_path_obj = _safe_session_path(self.working_dir / "sockets", session_id, ".sock")
         socket_path_obj.parent.mkdir(parents=True, exist_ok=True)
         socket_path = str(socket_path_obj)
 
@@ -178,87 +221,80 @@ class AgentRuntime:
 
         return socket_path
 
-    async def _close_session_socket(self, session_id: str) -> None:
+    async def _close_session_socket(self, session_id: str) -> Optional[str]:
         """Close and remove a session-specific socket."""
         server = self._session_servers.pop(session_id, None)
         if server:
             server.close()
             await server.wait_closed()
-            
+
         socket_path = self._session_sockets.pop(session_id, None)
         if socket_path and os.path.exists(socket_path):
             try:
                 os.unlink(socket_path)
             except OSError:
                 pass
-        
+
         return socket_path
+
+    _COMMAND_HANDLERS = {
+        "spawn": "_handle_spawn_command",
+        "wait": "_handle_wait_command",
+        "save_checkpoint": "_handle_save_checkpoint",
+        "load_checkpoint": "_handle_load_checkpoint",
+        "db_query": "_handle_db_query",
+        "db_execute": "_handle_db_execute",
+        "db_vector_search": "_handle_db_vector",
+        "hitl_request": "_handle_hitl_request",
+    }
+
+    async def _dispatch_command(self, command: str, request: dict, session_id: str) -> dict:
+        """Dispatch an IPC command to its handler."""
+        if command in ("db_get", "db_set"):
+            op = command[3:]  # "get" or "set"
+            return await self._handle_db_nosql(request, op, session_id)
+        handler_name = self._COMMAND_HANDLERS.get(command)
+        if handler_name is None:
+            return {"status": "error", "error": f"Unknown command: {command}"}
+        return await getattr(self, handler_name)(request, session_id)
+
+    async def _read_and_dispatch(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, session_id: str) -> None:
+        """Read one framed request, dispatch it, and write the response."""
+        import json
+        length_data = await reader.readexactly(4)
+        message_length = struct.unpack(">I", length_data)[0]
+
+        if message_length > 128 * 1024 * 1024:
+            logger.error("Refusing massive IPC payload: %d bytes", message_length)
+            raise ValueError(f"IPC payload too large: {message_length} bytes")
+
+        data = await reader.readexactly(message_length)
+        try:
+            request = json.loads(data.decode())
+        except json.JSONDecodeError:
+            return
+
+        response = await self._dispatch_command(request.get("command") or "", request, session_id)
+        encoded = json.dumps(response).encode()
+        writer.write(struct.pack(">I", len(encoded)) + encoded)
+        await writer.drain()
 
     async def _handle_session_request(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, session_id: str
     ) -> None:
-        """Handle IPC requests using length-prefixed framing (v0.2.1 Hardening)."""
+        """Handle one IPC connection: read, dispatch, respond, then close."""
         try:
-            # 1. Read the length-prefix (4-byte big-endian)
-            # This allows us to handle payloads > 1MB safely.
-            length_data = await reader.readexactly(4)
-            message_length = struct.unpack(">I", length_data)[0]
-            
-            # Security: Sanity check on message length (limit to 128MB)
-            if message_length > 128 * 1024 * 1024:
-                logger.error(f"Refusing massive IPC payload: {message_length} bytes")
-                return
-
-            # 2. Read the full message body
-            data = await reader.readexactly(message_length)
-            if not data:
-                return
-                
-            import json
-            try:
-                request = json.loads(data.decode())
-            except json.JSONDecodeError:
-                return
-
-            command = request.get("command")
-            response = {"status": "error", "error": f"Unknown command: {command}"}
-
-            if command == "spawn":
-                response = await self._handle_spawn_command(request, session_id)
-            elif command == "wait":
-                response = await self._handle_wait_command(request, session_id)
-            elif command == "save_checkpoint":
-                response = await self._handle_save_checkpoint(request, session_id)
-            elif command == "load_checkpoint":
-                response = await self._handle_load_checkpoint(request, session_id)
-            elif command == "db_query":
-                response = await self._handle_db_query(request, session_id)
-            elif command == "db_execute":
-                response = await self._handle_db_execute(request, session_id)
-            elif command == "db_get":
-                response = await self._handle_db_nosql(request, "get", session_id)
-            elif command == "db_set":
-                response = await self._handle_db_nosql(request, "set", session_id)
-            elif command == "db_vector_search":
-                response = await self._handle_db_vector(request, session_id)
-            elif command == "hitl_request":
-                response = await self._handle_hitl_request(request, session_id)
-
-            # 3. Send length-prefixed response
-            encoded_response = json.dumps(response).encode()
-            writer.write(struct.pack(">I", len(encoded_response)) + encoded_response)
-            await writer.drain()
+            await self._read_and_dispatch(reader, writer, session_id)
         except asyncio.IncompleteReadError:
-            # Normal client disconnection
             pass
         except Exception as e:
-            logger.error(f"IPC Error for session {session_id}: {e}")
+            logger.error("IPC Error for session %s: %s", session_id, e)
         finally:
             writer.close()
             try:
                 await writer.wait_closed()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("writer.wait_closed() failed: %s", e)
 
     async def _handle_spawn_command(self, request: dict, parent_session_id: str) -> dict:
         logger.info(f"Received spawn request from session {parent_session_id}")
@@ -347,26 +383,27 @@ class AgentRuntime:
 
     async def _handle_save_checkpoint(self, request: dict, session_id: str) -> dict:
         data_payload = request.get("data_payload")
-        if data_payload:
-            checkpoint_file = self.state_dir / f"{session_id}.checkpoint"
-            try:
-                with open(checkpoint_file, "w") as f:
-                    f.write(data_payload)
-                return {"status": "success"}
-            except Exception as e:
-                return {"status": "error", "error": str(e)}
-        return {"status": "error", "error": "Missing data_payload"}
+        if not data_payload:
+            return {"status": "error", "error": "Missing data_payload"}
+        # data_payload is a hex-encoded cloudpickle blob — store as binary to prevent injection.
+        try:
+            checkpoint_file = _safe_session_path(self.state_dir, session_id, ".checkpoint")
+            checkpoint_file.write_bytes(bytes.fromhex(data_payload))
+            return {"status": "success"}
+        except (ValueError, OSError) as e:
+            return {"status": "error", "error": str(e)}
 
     async def _handle_load_checkpoint(self, request: dict, session_id: str) -> dict:
-        checkpoint_file = self.state_dir / f"{session_id}.checkpoint"
-        if checkpoint_file.exists():
-            try:
-                with open(checkpoint_file, "r") as f:
-                    data_payload = f.read()
-                return {"status": "success", "data_payload": data_payload}
-            except Exception as e:
-                return {"status": "error", "error": str(e)}
-        return {"status": "error", "error": "Checkpoint not found"}
+        try:
+            checkpoint_file = _safe_session_path(self.state_dir, session_id, ".checkpoint")
+        except ValueError as e:
+            return {"status": "error", "error": str(e)}
+        if not checkpoint_file.exists():
+            return {"status": "error", "error": "Checkpoint not found"}
+        try:
+            return {"status": "success", "data_payload": checkpoint_file.read_bytes().hex()}
+        except OSError as e:
+            return {"status": "error", "error": str(e)}
 
     def _check_db_access(self, session_id: Optional[str], db_id: str) -> bool:
         """Verify that a session is allowed to access a specific database."""
@@ -422,15 +459,12 @@ class AgentRuntime:
         if not self._check_db_access(session_id, db_id):
             return {"status": "error", "error": f"Access denied to database '{db_id}' for session '{session_id}'"}
             
+        if not query:
+            return {"status": "error", "error": "Missing query"}
         try:
-            # 1. Basic SQL injection check
-            if query:
-                self._validate_sql_query(query)
-
+            self._validate_sql_query(query)
             from isolated_agents_sdk.adapters.registry import get_registry
-            registry = get_registry()
-            adapter = registry.get_database_adapter(db_id)
-            
+            adapter = get_registry().get_database_adapter(db_id)
             results = await adapter.query(query, **params)
             return {"status": "success", "results": results}
         except Exception as e:
@@ -441,22 +475,19 @@ class AgentRuntime:
         db_id = request.get("db_id")
         query = request.get("query")
         params = request.get("params", {})
-        
+
         if not db_id:
             return {"status": "error", "error": "Missing db_id"}
 
         if not self._check_db_access(session_id, db_id):
             return {"status": "error", "error": f"Access denied to database '{db_id}' for session '{session_id}'"}
-            
-        try:
-            # 1. Basic SQL injection check
-            if query:
-                self._validate_sql_query(query)
 
+        if not query:
+            return {"status": "error", "error": "Missing query"}
+        try:
+            self._validate_sql_query(query)
             from isolated_agents_sdk.adapters.registry import get_registry
-            registry = get_registry()
-            adapter = registry.get_database_adapter(db_id)
-            
+            adapter = get_registry().get_database_adapter(db_id)
             rowcount = await adapter.execute(query, **params)
             return {"status": "success", "rowcount": rowcount}
         except Exception as e:
@@ -482,10 +513,13 @@ class AgentRuntime:
                 return {"status": "error", "error": f"Adapter '{db_id}' is not a NoSQL adapter"}
                 
             if op == "get":
-                value = await adapter.get(request.get("key"), request.get("collection"))
+                key = request.get("key")
+                if not key:
+                    return {"status": "error", "error": "Missing key"}
+                value = await adapter.query(key, {"collection": request.get("collection")})
                 return {"status": "success", "value": value}
             elif op == "set":
-                await adapter.set(request.get("key"), request.get("value"), request.get("collection"))
+                await adapter.execute("set", {"key": request.get("key"), "value": request.get("value"), "collection": request.get("collection")})
                 return {"status": "success"}
             return {"status": "error", "error": f"Unknown NoSQL operation: {op}"}
         except Exception as e:
@@ -510,10 +544,9 @@ class AgentRuntime:
             if not isinstance(adapter, VectorDatabaseAdapter):
                 return {"status": "error", "error": f"Adapter '{db_id}' is not a Vector adapter"}
                 
-            results = await adapter.search(
-                request.get("query_vector"), 
-                request.get("limit", 5), 
-                request.get("collection")
+            results = await adapter.query(
+                request.get("query_vector"),
+                {"top_k": request.get("limit", 5), "collection": request.get("collection")},
             )
             return {"status": "success", "results": results}
         except Exception as e:

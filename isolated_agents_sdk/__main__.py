@@ -98,14 +98,49 @@ def main():
     run_parser.add_argument("--network", action="store_true", help="Enable network access")
     run_parser.add_argument("--env", action="append", help="Environment variables (KEY=VAL)")
     run_parser.add_argument("--json", action="store_true", help="Use structured JSON logging")
+    
+    # New commands from cli.py
+    # 'init' command
+    init_parser = subparsers.add_parser("init", help="Initialize new project")
+    init_parser.add_argument("name", help="Project name")
+    
+    # 'config' commands
+    config_parser = subparsers.add_parser("config", help="Manage configuration")
+    config_subparsers = config_parser.add_subparsers(dest="config_command")
+    
+    config_create = config_subparsers.add_parser("create", help="Create default config")
+    config_create.add_argument("-o", "--output", help="Output file path")
+    config_create.add_argument("-f", "--force", action="store_true", help="Overwrite existing")
+    
+    config_list = config_subparsers.add_parser("list", help="List agents in config")
+    config_list.add_argument("-c", "--config", help="Config file path")
+    
+    # 'ps' command
+    ps_parser = subparsers.add_parser("ps", help="List running agents")
 
     args = parser.parse_args()
     
+    # Route to appropriate handler
     if args.subcommand == "run":
         asyncio.run(run_one_liner(args))
     elif args.subcommand == "runtime" or not args.subcommand:
         # Fallback to runtime mode if no subcommand (backward compat)
         asyncio.run(run_runtime(args))
+    elif args.subcommand in ["init", "config", "ps"]:
+        # Use new CLI handlers
+        from isolated_agents_sdk.cli import cmd_init, cmd_config_create, cmd_config_list, cmd_ps
+        
+        if args.subcommand == "init":
+            sys.exit(cmd_init(args))
+        elif args.subcommand == "config":
+            if args.config_command == "create":
+                sys.exit(cmd_config_create(args))
+            elif args.config_command == "list":
+                sys.exit(cmd_config_list(args))
+            else:
+                config_parser.print_help()
+        elif args.subcommand == "ps":
+            sys.exit(cmd_ps(args))
     else:
         parser.print_help()
 

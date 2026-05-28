@@ -1,221 +1,171 @@
 """Logging configuration for the Isolated Agents SDK.
 
-Provides a unified logging setup with support for colored console output
-and timestamps.
+Uses loguru as the backend. Stdlib logging calls (from third-party libraries
+and internal ``logging.getLogger`` usage) are intercepted and forwarded to
+loguru via InterceptHandler so everything flows through a single pipeline.
 """
 
+from __future__ import annotations
+
+import fnmatch
 import logging
 import sys
-import json
-import fnmatch
-from datetime import datetime, timezone
-from typing import Optional, Any, Dict, List
+from typing import Any, List, Optional
 
-# Detection for colored logs
+from loguru import logger as _loguru_logger
 
-# Detection for colored logs
-try:
-    import colorlog
-    _HAS_COLORLOG = True
-except ImportError:
-    _HAS_COLORLOG = False
+# ---------------------------------------------------------------------------
+# Sensitive-value masking
+# ---------------------------------------------------------------------------
+
+_SENSITIVE_PATTERNS: List[str] = [
+    "*PASSWORD*", "*SECRET*", "*TOKEN*", "*KEY*", "*CREDENTIALS*",
+]
+
+
+def _mask_value(key: str, value: Any) -> Any:
+    """Return [MASKED] if key matches a sensitive pattern, else value."""
+    if not isinstance(key, str):
+        return value
+    key_upper = key.upper()
+    for pattern in _SENSITIVE_PATTERNS:
+        if fnmatch.fnmatch(key_upper, pattern.upper()):
+            return "[MASKED]"
+    if isinstance(value, dict):
+        return {k: _mask_value(k, v) for k, v in value.items()}
+    return value
+
+
+def add_global_sensitive_patterns(patterns: List[str]) -> None:
+    """Register additional sensitive key patterns for log masking."""
+    for p in patterns:
+        if p not in _SENSITIVE_PATTERNS:
+            _SENSITIVE_PATTERNS.append(p)
+
+
+# ---------------------------------------------------------------------------
+# Stdlib → loguru bridge
+# ---------------------------------------------------------------------------
+
+class _InterceptHandler(logging.Handler):
+    """Forward every stdlib logging record into loguru."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # Map stdlib level name → loguru level
+        try:
+            level: str | int = _loguru_logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        # Walk the call stack to find the true caller (skip loguru internals)
+        frame, depth = logging.currentframe(), 2
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back  # type: ignore[assignment]
+            depth += 1
+
+        _loguru_logger.opt(depth=depth, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def setup_logging(
     level: int = logging.INFO,
     use_colors: bool = True,
     log_file: Optional[str] = None,
-    structured: bool = False
+    structured: bool = False,
 ) -> None:
-    """Configure logging for the SDK.
-    
-    Args:
-        level: Logging level (default: logging.INFO)
-        use_colors: Whether to use colored output in console
-        log_file: Optional path to write logs to disk
-        structured: Whether to use JSON formatted output
-    """
-    # Map standard level names to user requested markers
-    logging.addLevelName(logging.DEBUG, "Default")
-    logging.addLevelName(logging.INFO, "INFO")
-    logging.addLevelName(logging.WARNING, "Warning")
-    logging.addLevelName(logging.ERROR, "Error")
-    logging.addLevelName(logging.CRITICAL, "Error")
+    """Configure loguru for the SDK.
 
-    # Root logger for the SDK
-    logger = logging.getLogger("isolated_agents_sdk")
-    logger.setLevel(level)
-    
-    # Remove existing handlers to avoid duplicates
-    for handler in logger.handlers[:]:
-        logger.removeHandler(handler)
-        
-    # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    
+    Args:
+        level: Logging level (default: logging.INFO).
+        use_colors: Whether to colorise console output.
+        log_file: Optional path to write logs to disk (JSON lines).
+        structured: If True, console output is also JSON.
+    """
+    level_name = logging.getLevelName(level)
+
+    # Remove all existing loguru sinks so repeated calls don't duplicate output
+    _loguru_logger.remove()
+
     if structured:
-        formatter = JsonFormatter()
+        fmt = _json_formatter
     else:
-        # Custom "Pretty/Logfmt" unbundled format for console
-        formatter = ConsoleFormatter()
-        
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    
-    # File handler if requested
+        fmt = (
+            "<green>{time:YYYY-MM-DDTHH:mm:ss.SSS}Z</green> "
+            "<level>[{level}]</level> "
+            "<cyan>{extra[sdk_name]}</cyan>: {message}"
+        )
+
+    _loguru_logger.configure(extra={"sdk_name": "isolated_agents_sdk"})
+
+    _loguru_logger.add(
+        sys.stdout,
+        level=level_name,
+        format=fmt,
+        colorize=use_colors and not structured,
+        filter=_sensitive_filter,
+    )
+
     if log_file:
-        file_handler = logging.FileHandler(log_file)
-        file_formatter = JsonFormatter() if structured else ConsoleFormatter()
-        file_handler.setFormatter(file_formatter)
-        logger.addHandler(file_handler)
+        _loguru_logger.add(
+            log_file,
+            level=level_name,
+            format=_json_formatter,
+            colorize=False,
+            rotation="10 MB",
+            retention=5,
+            filter=_sensitive_filter,
+        )
+
+    # Intercept all stdlib logging (third-party libs + our own getLogger calls)
+    logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
+    # Silence noisy stdlib loggers that would otherwise flood output
+    for noisy in ("asyncio", "urllib3", "httpx"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+
 
 def get_logger(name: str) -> logging.Logger:
-    """Helper to get a logger within the SDK namespace."""
+    """Return a stdlib Logger that forwards to loguru via InterceptHandler.
+
+    Keeping the stdlib interface means no changes are needed in the ~20 files
+    that already call ``logging.getLogger(__name__)``.
+    """
     if not name.startswith("isolated_agents_sdk"):
         name = f"isolated_agents_sdk.{name}"
     return logging.getLogger(name)
 
-class ConsoleFormatter(logging.Formatter):
-    """Formatter that outputs a flattened 'Pretty/Logfmt' style line for console."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.sensitive_patterns: List[str] = [
-            "*PASSWORD*", "*SECRET*", "*TOKEN*", "*KEY*", "*CREDENTIALS*"
-        ]
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
 
-    def add_sensitive_patterns(self, patterns: List[str]):
-        """Add additional sensitive patterns for masking."""
-        for p in patterns:
-            if p not in self.sensitive_patterns:
-                self.sensitive_patterns.append(p)
+def _sensitive_filter(record: dict) -> bool:  # type: ignore[type-arg]
+    """Mask sensitive values in the loguru record's extra dict in-place."""
+    for key in list(record.get("extra", {}).keys()):
+        record["extra"][key] = _mask_value(key, record["extra"][key])
+    return True
 
-    def _mask_value(self, key: str, value: Any) -> Any:
-        """Mask value if key matches sensitive patterns."""
-        if not isinstance(key, str):
-            return value
-            
-        key_upper = key.upper()
-        for pattern in self.sensitive_patterns:
-            if fnmatch.fnmatch(key_upper, pattern.upper()):
-                return "[MASKED]"
-        
-        # also check if the value itself looks like a dict/JSON and mask recursively
-        if isinstance(value, dict):
-            return {k: self._mask_value(k, v) for k, v in value.items()}
-            
-        return value
 
-    def format(self, record: logging.LogRecord) -> str:
-        # 1. Base components
-        timestamp = datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat()
-        level = record.levelname
-        # Strip internal namespace prefix for cleaner logs
-        logger_name = record.name.replace("isolated_agents_sdk.", "")
-        message = record.getMessage()
+def _json_formatter(record: dict) -> str:  # type: ignore[type-arg]
+    """Produce a JSON-lines string from a loguru record."""
+    import json
+    from datetime import timezone
 
-        # 2. Extract extra fields
-        extra_fields = []
-        for key, value in record.__dict__.items():
-            if key not in ("args", "asctime", "created", "exc_info", "exc_text",
-                           "filename", "funcName", "levelname", "levelno", "lineno",
-                           "module", "msecs", "message", "msg", "name", "pathname",
-                           "process", "processName", "relativeCreated", "stack_info",
-                           "thread", "threadName"):
-                
-                # v0.2.0: Mask sensitive fields
-                value = self._mask_value(key, value)
-
-                # Handle spaces in values (logfmt style quoting)
-                if isinstance(value, str) and " " in value:
-                    value = f'"{value}"'
-                extra_fields.append(f"{key}={value}")
-
-        # 3. Handle colors if enabled
-        res_message = message
-        if _HAS_COLORLOG:
-            # We use colorlog's prefix logic if possible or manual ANSI
-            color_map = {
-                'Default':  '\033[36m', # Cyan
-                'INFO':     '\033[32m', # Green
-                'Warning':  '\033[33m', # Yellow
-                'Error':    '\033[31m', # Red
-            }
-            reset = '\033[0m'
-            color = color_map.get(level, '')
-            res_line = f"{timestamp} {color}[{level}]{reset} {logger_name}: {message}"
-        else:
-            res_line = f"{timestamp} [{level}] {logger_name}: {message}"
-
-        # 4. Append extras with separator if present
-        if extra_fields:
-            res_line += f" | {' '.join(extra_fields)}"
-
-        # 5. Append exceptions
-        if record.exc_info:
-            res_line += f"\n{self.formatException(record.exc_info)}"
-
-        return res_line
-
-class JsonFormatter(logging.Formatter):
-    """Formatter that outputs JSON for structured logging."""
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.sensitive_patterns: List[str] = [
-            "*PASSWORD*", "*SECRET*", "*TOKEN*", "*KEY*", "*CREDENTIALS*"
-        ]
-
-    def add_sensitive_patterns(self, patterns: List[str]):
-        """Add additional sensitive patterns for masking."""
-        for p in patterns:
-            if p not in self.sensitive_patterns:
-                self.sensitive_patterns.append(p)
-
-    def _mask_value(self, key: str, value: Any) -> Any:
-        """Mask value if key matches sensitive patterns."""
-        if not isinstance(key, str):
-            return value
-            
-        key_upper = key.upper()
-        for pattern in self.sensitive_patterns:
-            if fnmatch.fnmatch(key_upper, pattern.upper()):
-                return "[MASKED]"
-        
-        if isinstance(value, dict):
-            return {k: self._mask_value(k, v) for k, v in value.items()}
-            
-        return value
-
-    def format(self, record: logging.LogRecord) -> str:
-        log_data: Dict[str, Any] = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
-            "level": record.levelname,
-            "logger": record.name,
-            "message": record.getMessage(),
-        }
-        
-        # Add extra fields if present in record (from 'extra' dict in logging calls)
-        # Standard logging doesn't put 'extra' keys directly on record in a clean way,
-        # but common structured logging patterns use this.
-        for key, value in record.__dict__.items():
-            if key not in ("args", "asctime", "created", "exc_info", "exc_text", 
-                           "filename", "funcName", "levelname", "levelno", "lineno", 
-                           "module", "msecs", "message", "msg", "name", "pathname", 
-                           "process", "processName", "relativeCreated", "stack_info", 
-                           "thread", "threadName"):
-                # v0.2.0: Mask sensitive fields
-                log_data[key] = self._mask_value(key, value)
-            
-        # Add exception info if present
-        if record.exc_info:
-            log_data["exception"] = self.formatException(record.exc_info)
-            
-        return json.dumps(log_data)
-
-def add_global_sensitive_patterns(patterns: List[str]):
-    """Register sensitive patterns with all active SDK formatters."""
-    root_logger = logging.getLogger("isolated_agents_sdk")
-    for handler in root_logger.handlers:
-        formatter = handler.formatter
-        if hasattr(formatter, "add_sensitive_patterns"):
-            formatter.add_sensitive_patterns(patterns)
+    ts = record["time"].astimezone(timezone.utc).isoformat()
+    entry: dict[str, Any] = {
+        "timestamp": ts,
+        "level": record["level"].name,
+        "logger": record["name"],
+        "message": record["message"],
+    }
+    extra = {k: _mask_value(k, v) for k, v in record.get("extra", {}).items()
+             if k != "sdk_name"}
+    if extra:
+        entry["extra"] = extra
+    if record["exception"]:
+        entry["exception"] = str(record["exception"])
+    return json.dumps(entry) + "\n"

@@ -2,47 +2,122 @@
 
 Complete, production-ready examples for all supported frameworks and common scenarios.
 
+## 🚀 Quick Navigation
+
+- **📖 [Summary](SUMMARY.md)** - Overview of all examples and documentation
+- **🎯 [Getting Started](GETTING_STARTED.md)** - 5-minute quick start guide
+- **📑 [Examples Index](INDEX.md)** - Browse all examples by category
+- **💻 [All Examples](ALL_EXAMPLES.md)** - Complete code collection
+- **🎨 [Scenarios](scenarios/)** - Real-world use cases
+- **⚡ [Quick Reference](QUICK_REFERENCE.md)** - Fast reference card
+- **🔧 [Troubleshooting](TROUBLESHOOTING.md)** - Solve common issues
+
 ## 📁 Directory Structure
 
 ```
 examples/
-├── README.md                    # This file
-├── frameworks/                  # Framework-specific examples
-│   ├── langchain/              # LangChain examples
-│   ├── crewai/                 # CrewAI examples
-│   ├── autogpt/                # AutoGPT examples
-│   ├── llamaindex/             # LlamaIndex examples
-│   ├── haystack/               # Haystack examples
-│   ├── semantic_kernel/        # Semantic Kernel examples
-│   ├── nodejs/                 # Node.js examples
-│   ├── go/                     # Go examples
-│   ├── rust/                   # Rust examples
-│   └── java/                   # Java examples
-├── scenarios/                   # Common use case examples
-│   ├── web_scraping/           # Web scraping examples
-│   ├── data_analysis/          # Data analysis examples
-│   ├── code_generation/        # Code generation examples
-│   ├── document_processing/    # Document processing examples
-│   ├── api_integration/        # API integration examples
-│   └── multi_agent/            # Multi-agent examples
-├── features/                    # Feature-specific examples
-│   ├── decorators/             # Decorator system examples
-│   ├── composability/          # Agent composition examples
-│   ├── multimodal/             # Multimodal output examples
-│   ├── validation/             # Validation examples
-│   └── telemetry/              # Telemetry examples
-└── advanced/                    # Advanced patterns
-    ├── custom_adapters/        # Custom adapter examples
-    ├── distributed/            # Distributed agent examples
-    ├── production/             # Production deployment examples
-    └── testing/                # Testing examples
+├── README.md                        # This file
+├── GETTING_STARTED.md              # 👈 Start here! (5-minute guide)
+├── INDEX.md                         # Complete examples catalog
+├── ALL_EXAMPLES.md                  # Full code collection
+│
+├── Root Examples/                   # Core feature demonstrations
+│   ├── hello_world_agnostic.py     # Basic agent execution
+│   ├── file_summariser_agnostic.py # File processing
+│   ├── multi_agent_hierarchy.py    # Hierarchical multi-agent
+│   ├── multi_agent_mesh.py         # Collaborative multi-agent
+│   ├── graph_agents_orchestration.py # Graph orchestration
+│   ├── database_agent.py           # Database access
+│   ├── durable_execution.py        # State persistence
+│   ├── observability_metrics.py    # Metrics & telemetry
+│   ├── production_json_logging.py  # Structured logging
+│   ├── server_agent_example.py     # HTTP server
+│   ├── scheduled_agent_example.py  # Scheduled tasks
+│   ├── runtime_recursion_example.py # Recursive agents
+│   └── streamed_output_example.py  # Real-time output
+│
+├── scenarios/                       # 👈 Real-world use cases
+│   ├── README.md                   # Scenarios guide
+│   ├── web_scraping/               # Web scraping + AI analysis
+│   ├── data_analysis/              # CSV analysis + visualization
+│   ├── code_generation/            # AI code generation + testing
+│   └── api_integration/            # REST API integration
+│
+├── frameworks/                      # Framework-specific examples
+│   ├── langchain/                  # LangChain examples
+│   └── crewai/                     # CrewAI examples
+│
+├── advanced/                        # Advanced patterns
+│   ├── server_agent.py             # Long-running servers
+│   ├── scheduled_agents.py         # Scheduled execution
+│   ├── recursive_agent.py          # Recursive spawning
+│   └── structured_logging.py       # Production logging
+│
+├── distributed/                     # Multi-agent communication
+│   ├── README.md                   # Distributed patterns guide
+│   ├── redis_pubsub_agents.py      # Redis pub/sub
+│   └── rabbitmq_work_queue.py      # RabbitMQ work queue
+│
+└── adapters/                        # Custom adapter examples
 ```
 
-## 🚀 v0.2.0 Featured Examples
+## 🚀 v0.2.1 Featured Examples
 
-The latest version of the SDK introduces advanced orchestration features.
+The latest version introduces advanced orchestration and production features.
 
-### Advanced Scenarios
+### 🎯 New Scenario Examples (Real-World Use Cases)
+
+#### Web Scraping & Analysis
+**[scenarios/web_scraping/scrape_and_analyze.py](scenarios/web_scraping/scrape_and_analyze.py)**
+- Scrape websites with network isolation
+- AI-powered content analysis
+- Structured output generation
+- Comprehensive error handling
+
+```bash
+export OPENAI_API_KEY=sk-...
+python examples/scenarios/web_scraping/scrape_and_analyze.py
+```
+
+#### Data Analysis & Visualization
+**[scenarios/data_analysis/csv_analysis.py](scenarios/data_analysis/csv_analysis.py)**
+- Statistical analysis with pandas
+- Beautiful visualizations (matplotlib, seaborn)
+- Correlation analysis and outlier detection
+- Multiple output formats
+
+```bash
+python examples/scenarios/data_analysis/csv_analysis.py
+# Or with your own CSV:
+python examples/scenarios/data_analysis/csv_analysis.py path/to/data.csv
+```
+
+#### AI Code Generation & Testing
+**[scenarios/code_generation/generate_and_test.py](scenarios/code_generation/generate_and_test.py)**
+- Generate code with LLMs
+- Automatic syntax validation
+- Test generation and execution
+- Documentation generation
+
+```bash
+export OPENAI_API_KEY=sk-...
+python examples/scenarios/code_generation/generate_and_test.py
+# Or with custom prompt:
+python examples/scenarios/code_generation/generate_and_test.py "Create a sorting function"
+```
+
+#### REST API Integration
+**[scenarios/api_integration/rest_api_agent.py](scenarios/api_integration/rest_api_agent.py)**
+- Automatic retry logic with exponential backoff
+- Rate limiting and timeout handling
+- Network isolation
+- Response validation
+
+```bash
+python examples/scenarios/api_integration/rest_api_agent.py
+```
+
+### 🔧 Advanced Orchestration
 - **[Streamed Outputs](./streamed_output_example.py)**: Real-time stdout capture from isolated agents using callbacks.
 - **[Observability & Metrics](./observability_metrics.py)**: Exporting real-time telemetry from the `AgentRuntime` status API.
 - **[Durable Execution](./durable_execution.py)**: Multi-step agents with state persistence and checkpointing APIs.

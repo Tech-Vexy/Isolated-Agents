@@ -34,9 +34,10 @@ from isolated_agents_sdk.models import AgentResult, Policy, CONTAINER_OUTPUT_PAT
 # Detect if adapters are available
 try:
     from isolated_agents_sdk.adapters.factory import AdapterFactory
-    from isolated_agents_sdk.adapters.registry import get_adapter_registry
+    from isolated_agents_sdk.adapters.registry import get_registry as _get_registry
     _ADAPTERS_AVAILABLE = True
 except ImportError:
+    _get_registry = None  # type: ignore[assignment]
     _ADAPTERS_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
@@ -58,8 +59,8 @@ class OutputCollector:
     ) -> None:
         if container_adapter:
             self._container_adapter = container_adapter
-        elif _ADAPTERS_AVAILABLE:
-            self._container_adapter = get_adapter_registry().get_container_adapter()
+        elif _ADAPTERS_AVAILABLE and _get_registry is not None:
+            self._container_adapter = _get_registry().get_container_adapter()
         else:
             from isolated_agents_sdk.adapters.container.podman import PodmanAdapter
             self._container_adapter = PodmanAdapter()
@@ -230,26 +231,37 @@ class OutputCollector:
                 artifacts[rel] = location.path or str(location.url)
 
         # 4. Fetch the agent return value (cloudpickle'd)
+        # Security: cap the pickle size before deserializing to limit RCE blast radius.
+        _MAX_RETURN_BYTES = 64 * 1024 * 1024  # 64 MB
         agent_output = None
         tmp_path = None
         try:
             with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as tmp:
                 tmp_path = Path(tmp.name)
-            
+
             await self._container_adapter.copy_from_container(
                 container_id, CONTAINER_OUTPUT_PATH, str(tmp_path)
             )
-            if tmp_path.exists() and tmp_path.stat().st_size > 0:
-                with open(tmp_path, "rb") as f:
-                    agent_output = cloudpickle.load(f)
+            if tmp_path.exists():
+                size = tmp_path.stat().st_size
+                if size == 0:
+                    pass  # no return value
+                elif size > _MAX_RETURN_BYTES:
+                    logger.warning(
+                        "Agent return value (%d bytes) exceeds %d byte cap; discarding.",
+                        size, _MAX_RETURN_BYTES,
+                    )
+                else:
+                    with open(tmp_path, "rb") as f:
+                        agent_output = cloudpickle.load(f)
         except Exception as e:
-            logger.debug("No return value found or Error unpickling result: %s", e)
+            logger.debug("No return value found or error unpickling result: %s", e)
         finally:
             if tmp_path and tmp_path.exists():
                 try:
                     tmp_path.unlink(missing_ok=True)
-                except Exception:
-                    pass
+                except OSError as e:
+                    logger.debug("Failed to remove temp pickle file: %s", e)
 
         # 5. Validate structured output if requested
         if policy.structured_output and agent_output is not None:
