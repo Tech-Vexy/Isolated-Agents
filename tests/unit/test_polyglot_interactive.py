@@ -9,15 +9,15 @@ Verifies:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from isolated_agents_sdk import (
     Policy,
     async_run_agent,
-    start_agent_daemon,
     exec_in_session,
+    start_agent_daemon,
     sync_artifact,
 )
 from isolated_agents_sdk.adapters import AdapterRegistry
@@ -25,6 +25,7 @@ from isolated_agents_sdk.adapters import AdapterRegistry
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _make_mock_proc(exit_code: int = 0, stdout: bytes = b"", stderr: bytes = b""):
     """Return a mock asyncio subprocess that finishes immediately."""
@@ -41,8 +42,10 @@ async def _make_mock_proc(exit_code: int = 0, stdout: bytes = b"", stderr: bytes
 
     return proc
 
+
 def _make_fake_podman_exec(container_id: str = "test-container-abc123"):
     """Return a side_effect function for asyncio.create_subprocess_exec that simulates Podman."""
+
     async def fake_exec(*args, **kwargs):
         cmd = list(args)
         exit_code = 0
@@ -61,7 +64,7 @@ def _make_fake_podman_exec(container_id: str = "test-container-abc123"):
                     exit_code = 0
             elif subcmd == "cp":
                 # Simulate artifact sync
-                if ":" in cmd[2]: # src is container
+                if ":" in cmd[2]:  # src is container
                     try:
                         dest = Path(cmd[3])
                         if not dest.parent.exists():
@@ -78,11 +81,13 @@ def _make_fake_podman_exec(container_id: str = "test-container-abc123"):
 
     return fake_exec
 
+
 @pytest.fixture
 def working_dir(tmp_path):
     d = tmp_path / "work"
     d.mkdir()
     return d
+
 
 @pytest.fixture(autouse=True)
 def reset_registry():
@@ -91,39 +96,43 @@ def reset_registry():
     yield
     AdapterRegistry.reset_instance()
 
+
 @pytest.fixture(autouse=True)
 def mock_podman():
     """Automatically mock podman for all tests in this file."""
     fake_exec = _make_fake_podman_exec()
-    with patch("shutil.which", return_value="/usr/bin/podman"), \
-         patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+    with (
+        patch("shutil.which", return_value="/usr/bin/podman"),
+        patch("asyncio.create_subprocess_exec", side_effect=fake_exec),
+    ):
         yield
+
 
 # ---------------------------------------------------------------------------
 # Polyglot Support
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestPolyglotSupport:
     """SDK must support custom entrypoints and base images."""
 
     async def test_run_agent_with_custom_entrypoint(self, working_dir):
-        policy = Policy(
-            entrypoint=["node", "agent.js"],
-            base_image="node:18-alpine"
-        )
+        policy = Policy(entrypoint=["node", "agent.js"], base_image="node:18-alpine")
         # When entrypoint is set, agent callable can be None
         result = await async_run_agent(None, working_dir, policy)
         assert result.exit_code == 0
 
     async def test_fails_if_no_agent_and_no_entrypoint(self, working_dir):
-        policy = Policy() # No entrypoint
+        policy = Policy()  # No entrypoint
         with pytest.raises(ValueError, match="Agent callable must be provided"):
             await async_run_agent(None, working_dir, policy)
+
 
 # ---------------------------------------------------------------------------
 # Iterative Execution
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestIterativeExecution:
@@ -131,17 +140,21 @@ class TestIterativeExecution:
 
     async def test_exec_in_session(self, working_dir):
         # 1. Start a daemon session
-        session = await start_agent_daemon(None, working_dir, Policy(entrypoint=["sleep", "infinity"]))
-        
+        session = await start_agent_daemon(
+            None, working_dir, Policy(entrypoint=["sleep", "infinity"])
+        )
+
         # 2. Run a command inside it
         exit_code, stdout, stderr = await exec_in_session(session.session_id, ["ls", "-l"])
 
         assert exit_code == 0
         assert isinstance(stdout, str)
 
+
 # ---------------------------------------------------------------------------
 # Long-Running Agents
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestLongRunningAgents:
@@ -154,10 +167,10 @@ class TestLongRunningAgents:
 
     async def test_sync_artifact(self, working_dir, tmp_path):
         local_artifact = tmp_path / "synced.txt"
-        
+
         # 1. Start a session
         session = await start_agent_daemon(None, working_dir, Policy(entrypoint=["sleep", "3600"]))
-        
+
         # 2. Sync an artifact
         await sync_artifact(session.session_id, "/workspace/log.txt", local_artifact)
 

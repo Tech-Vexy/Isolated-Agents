@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Optional, Any
 from datetime import datetime
+from typing import Any, Optional
 
 from isolated_agents_sdk.adapters.audit.base import AuditAdapter
 from isolated_agents_sdk.adapters.audit.types import (
@@ -13,13 +13,14 @@ from isolated_agents_sdk.adapters.audit.types import (
     EventType,
 )
 
+
 class CompositeAuditAdapter(AuditAdapter):
     """Audit adapter that broadcasts events to multiple other adapters.
-    
+
     This allows simultaneous logging to persistent storage (e.g. file, DB)
     and real-time reporting (e.g. terminal telemetry, Datadog).
     """
-    
+
     def __init__(self, adapters: list[AuditAdapter]):
         super().__init__()
         self._adapters = adapters
@@ -28,7 +29,7 @@ class CompositeAuditAdapter(AuditAdapter):
     async def initialize(self) -> None:
         if self._initialized:
             return
-        
+
         # Initialize all sub-adapters
         tasks = [adapter.initialize() for adapter in self._adapters]
         if tasks:
@@ -38,7 +39,7 @@ class CompositeAuditAdapter(AuditAdapter):
     async def cleanup(self) -> None:
         if not self._initialized:
             return
-            
+
         tasks = [adapter.cleanup() for adapter in self._adapters]
         if tasks:
             await asyncio.gather(*tasks)
@@ -49,17 +50,17 @@ class CompositeAuditAdapter(AuditAdapter):
         event_type: EventType,
         session_id: str,
         agent_id: str,
-        payload: Optional[dict] = None,
-        user_id: Optional[str] = None,
+        payload: dict | None = None,
+        user_id: str | None = None,
         severity: str = "info",
-        tags: Optional[dict[str, str]] = None,
-        timestamp: Optional[str] = None,
-        raw_event_type: Optional[str] = None,
+        tags: dict[str, str] | None = None,
+        timestamp: str | None = None,
+        raw_event_type: str | None = None,
     ) -> str:
         # We fire and forget or gather. Logging should generally not block excessively.
         # Returning the event ID from the first adapter that provides one.
         main_event_id = ""
-        
+
         for i, adapter in enumerate(self._adapters):
             try:
                 event_id = await adapter.log_event(
@@ -78,7 +79,7 @@ class CompositeAuditAdapter(AuditAdapter):
             except Exception:
                 # We don't want one failing adapter to kill the whole logging process
                 pass
-                
+
         return main_event_id
 
     async def query_events(self, query: AuditQuery) -> list[AuditEvent]:
@@ -113,7 +114,9 @@ class CompositeAuditAdapter(AuditAdapter):
         return {}
 
     async def delete_events(self, query: AuditQuery) -> int:
-        results = await asyncio.gather(*[adapter.delete_events(query) for adapter in self._adapters], return_exceptions=True)
+        results = await asyncio.gather(
+            *[adapter.delete_events(query) for adapter in self._adapters], return_exceptions=True
+        )
         return sum(r for r in results if isinstance(r, int))
 
     async def export_events(self, **kwargs) -> str:

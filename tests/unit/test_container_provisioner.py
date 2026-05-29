@@ -3,19 +3,19 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
 from isolated_agents_sdk.container_provisioner import ContainerHandle, ContainerProvisioner
 from isolated_agents_sdk.exceptions import ContainerError, WorkingDirectoryError
 from isolated_agents_sdk.models import Policy
-from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _make_mock_adapter():
     adapter = MagicMock(spec=ContainerRuntimeAdapter)
@@ -23,8 +23,11 @@ async def _make_mock_adapter():
     adapter.cleanup = AsyncMock()
     adapter.health_check = AsyncMock(return_value=True)
     adapter.get_adapter_name = MagicMock(return_value="MockAdapter")
-    adapter.provision_container = AsyncMock(return_value=ContainerHandle(container_id="cid123", image="img"))
+    adapter.provision_container = AsyncMock(
+        return_value=ContainerHandle(container_id="cid123", image="img")
+    )
     return adapter
+
 
 def _provisioner(adapter=None) -> ContainerProvisioner:
     return ContainerProvisioner(adapter=adapter)
@@ -37,6 +40,7 @@ def _default_policy() -> Policy:
 # ---------------------------------------------------------------------------
 # _check_podman
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestCheckPodman:
@@ -59,6 +63,7 @@ class TestCheckPodman:
 # Working directory validation
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestWorkingDirectory:
     async def test_raises_for_nonexistent_directory(self, tmp_path):
@@ -79,31 +84,27 @@ class TestWorkingDirectory:
 # ---------------------------------------------------------------------------
 
 
-
-
 # ---------------------------------------------------------------------------
 # Provision Delegation
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestProvisionDelegation:
     async def test_delegates_to_adapter_with_correct_params(self, tmp_path):
         adapter = await _make_mock_adapter()
         p = _provisioner(adapter=adapter)
-        
+
         policy = Policy(
-            cpu_cores=2.0,
-            memory_mb=1024,
-            readonly_mounts=["/etc/test"],
-            allowed_env_vars=["VAR1"]
+            cpu_cores=2.0, memory_mb=1024, readonly_mounts=["/etc/test"], allowed_env_vars=["VAR1"]
         )
-        
+
         with patch.dict(os.environ, {"VAR1": "val1"}):
             await p.provision(tmp_path, policy, "s1", "a1")
-            
+
         adapter.provision_container.assert_called_once()
         kwargs = adapter.provision_container.call_args.kwargs
-        
+
         assert kwargs["resources"].cpu_cores == 2.0
         assert kwargs["resources"].memory_mb == 1024
         assert any(m.source == "/etc/test" and m.readonly for m in kwargs["mounts"])
@@ -115,6 +116,7 @@ class TestProvisionDelegation:
 # ContainerHandle
 # ---------------------------------------------------------------------------
 
+
 class TestContainerHandle:
     def test_has_container_id(self):
         handle = ContainerHandle(container_id="abc123")
@@ -124,6 +126,7 @@ class TestContainerHandle:
 # ---------------------------------------------------------------------------
 # Audit event on provision
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestAuditEvent:

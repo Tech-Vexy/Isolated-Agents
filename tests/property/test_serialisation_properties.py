@@ -3,10 +3,10 @@
 Feature: sub-agent-handling
 """
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from isolated_agents_sdk.models import NetworkPolicy, SubAgentPolicy
-
 
 # ---------------------------------------------------------------------------
 # Strategies
@@ -48,6 +48,7 @@ sub_agent_policy_strategy = st.builds(
 # Property 12: SubAgentPolicy serialisation round-trip
 # ---------------------------------------------------------------------------
 
+
 # Feature: sub-agent-handling, Property 12: SubAgentPolicy serialisation round-trip
 @given(sub_agent_policy_strategy)
 @settings(max_examples=100)
@@ -79,19 +80,21 @@ def test_sub_agent_policy_round_trip(policy: SubAgentPolicy) -> None:
 # ---------------------------------------------------------------------------
 
 # Known field names in SubAgentPolicy schema
-_KNOWN_SUB_AGENT_POLICY_FIELDS = frozenset({
-    "cpu_cores",
-    "memory_mb",
-    "network",
-    "readonly_mounts",
-    "allowed_env_vars",
-    "output_path_in_container",
-    "max_output_bytes",
-    "timeout_seconds",
-    "log_output_path",
-    "max_sub_agent_depth",
-    "max_sub_agents",
-})
+_KNOWN_SUB_AGENT_POLICY_FIELDS = frozenset(
+    {
+        "cpu_cores",
+        "memory_mb",
+        "network",
+        "readonly_mounts",
+        "allowed_env_vars",
+        "output_path_in_container",
+        "max_output_bytes",
+        "timeout_seconds",
+        "log_output_path",
+        "max_sub_agent_depth",
+        "max_sub_agents",
+    }
+)
 
 # Strategy for generating unknown field names (non-empty text, not a known field)
 unknown_field_name_strategy = st.text(
@@ -103,10 +106,12 @@ unknown_field_name_strategy = st.text(
 # Strategy for generating invalid values for max_sub_agent_depth / max_sub_agents:
 # zero, negative integers, non-integer floats, strings, or None
 invalid_limit_value_strategy = st.one_of(
-    st.integers(max_value=0),                                          # zero or negative
-    st.floats(min_value=0.1, max_value=1e6, allow_nan=False, allow_infinity=False),  # non-integer float
-    st.text(min_size=0, max_size=20),                                  # string
-    st.none(),                                                         # None
+    st.integers(max_value=0),  # zero or negative
+    st.floats(
+        min_value=0.1, max_value=1e6, allow_nan=False, allow_infinity=False
+    ),  # non-integer float
+    st.text(min_size=0, max_size=20),  # string
+    st.none(),  # None
 )
 
 
@@ -143,8 +148,9 @@ def test_sub_agent_policy_rejects_unknown_fields(
 
     Validates: Requirements 10.4
     """
-    from isolated_agents_sdk.exceptions import PolicyValidationError
     import json
+
+    from isolated_agents_sdk.exceptions import PolicyValidationError
 
     policy_dict = _make_valid_sub_agent_policy_dict()
     policy_dict[unknown_field] = unknown_value
@@ -182,12 +188,15 @@ def test_sub_agent_policy_rejects_invalid_limit_values(
 
     Validates: Requirements 10.5
     """
-    from isolated_agents_sdk.exceptions import PolicyValidationError
     import json
     import math
 
+    from isolated_agents_sdk.exceptions import PolicyValidationError
+
     # Skip NaN/Inf floats — json.dumps cannot serialise them
-    if isinstance(invalid_value, float) and (math.isnan(invalid_value) or math.isinf(invalid_value)):
+    if isinstance(invalid_value, float) and (
+        math.isnan(invalid_value) or math.isinf(invalid_value)
+    ):
         return
 
     policy_dict = _make_valid_sub_agent_policy_dict()

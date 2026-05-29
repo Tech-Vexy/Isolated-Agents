@@ -10,21 +10,42 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from isolated_agents_sdk.models import AgentResult, Policy
 from isolated_agents_sdk.output_collector import OutputCollector
-
 
 # ---------------------------------------------------------------------------
 # Strategies
 # ---------------------------------------------------------------------------
 
-_WINDOWS_RESERVED_NAMES = frozenset({
-    "con", "prn", "aux", "nul",
-    "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
-    "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
-})
+_WINDOWS_RESERVED_NAMES = frozenset(
+    {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        "com1",
+        "com2",
+        "com3",
+        "com4",
+        "com5",
+        "com6",
+        "com7",
+        "com8",
+        "com9",
+        "lpt1",
+        "lpt2",
+        "lpt3",
+        "lpt4",
+        "lpt5",
+        "lpt6",
+        "lpt7",
+        "lpt8",
+        "lpt9",
+    }
+)
 
 filename_strategy = st.text(
     alphabet="abcdefghijklmnopqrstuvwxyz0123456789_-",
@@ -54,6 +75,7 @@ id_strategy = st.text(
 # Property: Agent result contains exit code and artifacts
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @given(
     output_files=output_files_strategy,
@@ -72,7 +94,7 @@ async def test_agent_result_contains_exit_code_and_artifacts(
     mock_audit_logger = MagicMock()
     mock_container_adapter = AsyncMock()
     from isolated_agents_sdk.adapters.container.types import ExecResult
-    
+
     async def fake_exec_in_container(cid, cmd, **kwargs):
         if cmd[0] == "test":
             return ExecResult(exit_code=0, stdout="", stderr="")
@@ -92,34 +114,35 @@ async def test_agent_result_contains_exit_code_and_artifacts(
         Path(dest).write_bytes(output_files.get(name, b""))
 
     mock_container_adapter.copy_from_container = AsyncMock(side_effect=fake_copy_from_container)
-    
+
     mock_storage_adapter = AsyncMock()
     mock_storage_adapter.initialize = AsyncMock()
-    
+
     # Simulate storing artifacts
     stored_artifacts = {}
+
     async def fake_store(session_id, artifact_name, data, content_type=None):
         stored_artifacts[artifact_name] = data
         return MagicMock(path=f"{session_id}/{artifact_name}", url=None)
-    
+
     mock_storage_adapter.store_artifact = AsyncMock(side_effect=fake_store)
 
     collector = OutputCollector(
         audit_logger=mock_audit_logger,
         container_adapter=mock_container_adapter,
-        storage_adapter=mock_storage_adapter
+        storage_adapter=mock_storage_adapter,
     )
 
     with tempfile.TemporaryDirectory() as host_output_dir:
         # Patch Path.glob to simulate container files being copied to host
         # (Actually, we should patch PodmanAdapter.copy_from_container but we are using mocks)
-        
+
         # We need to simulate that files are present on the host so they can be "stored"
         # Since we mocked store_artifact, we just need to ensure the loop runs.
-        
-        # We'll mock the copy operation if we were using real adapters, but here we 
+
+        # We'll mock the copy operation if we were using real adapters, but here we
         # just need to make sure the collector sees the files.
-        
+
         with patch("isolated_agents_sdk.output_collector.Path.glob") as mock_glob:
             # Create mock path objects
             mock_paths = []
@@ -131,9 +154,9 @@ async def test_agent_result_contains_exit_code_and_artifacts(
                 # Mock read_bytes to return the expected content
                 p.read_bytes.return_value = output_files[name]
                 mock_paths.append(p)
-            
+
             mock_glob.return_value = mock_paths
-            
+
             result = await collector.collect(
                 container_id="test-container-id",
                 policy=Policy(output_path_in_container="/output", max_output_bytes=None),
@@ -146,7 +169,7 @@ async def test_agent_result_contains_exit_code_and_artifacts(
         assert isinstance(result, AgentResult)
         assert result.exit_code == exit_code
         assert result.session_id == session_id
-        
+
         # Check that storage adapter was called for each file
         assert len(stored_artifacts) == len(output_files)
         for name, content in output_files.items():

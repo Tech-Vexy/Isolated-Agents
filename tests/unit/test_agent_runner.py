@@ -9,22 +9,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
+from isolated_agents_sdk.adapters.container.types import ContainerHandle, ExecResult
 from isolated_agents_sdk.agent_runner import AgentRunner
 from isolated_agents_sdk.audit_logger import AuditLogger
-from isolated_agents_sdk.adapters.container.types import ContainerHandle
 from isolated_agents_sdk.models import (
-    AgentResult,
-    Policy,
     CONTAINER_BOOTSTRAP_PATH,
     CONTAINER_SOURCE_PATH,
+    AgentResult,
+    Policy,
 )
-from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
-from isolated_agents_sdk.adapters.container.types import ExecResult
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 class CapturingLogger(AuditLogger):
     """AuditLogger subclass that records emitted events for assertions."""
@@ -46,12 +45,17 @@ class CapturingLogger(AuditLogger):
 
 async def _make_mock_adapter():
     adapter = MagicMock(spec=ContainerRuntimeAdapter)
-    adapter.exec_in_container = AsyncMock(return_value=ExecResult(exit_code=0, stdout="", stderr=""))
+    adapter.exec_in_container = AsyncMock(
+        return_value=ExecResult(exit_code=0, stdout="", stderr="")
+    )
     adapter.copy_to_container = AsyncMock()
     adapter.get_adapter_name = MagicMock(return_value="MockAdapter")
     return adapter
 
-def _make_runner(container_id: str = "cid123", logger: AuditLogger | None = None, adapter=None) -> AgentRunner:
+
+def _make_runner(
+    container_id: str = "cid123", logger: AuditLogger | None = None, adapter=None
+) -> AgentRunner:
     handle = ContainerHandle(container_id=container_id)
     return AgentRunner(handle, audit_logger=logger or CapturingLogger(), adapter=adapter)
 
@@ -63,6 +67,7 @@ def _simple_agent():
 # ---------------------------------------------------------------------------
 # Source serialisation (_inject_source)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestInjectSource:
@@ -110,6 +115,7 @@ class TestInjectSource:
 # Bootstrap script generation (_inject_bootstrap)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestInjectBootstrap:
     async def test_script_contains_correct_source_path(self):
@@ -122,7 +128,9 @@ class TestInjectBootstrap:
             tmp_mock.__enter__ = lambda s: s
             tmp_mock.__exit__ = MagicMock(return_value=False)
             tmp_mock.name = "/tmp/fake_bootstrap.py"
-            tmp_mock.write = lambda c: captured_script.append(c if isinstance(c, str) else c.decode())
+            tmp_mock.write = lambda c: captured_script.append(
+                c if isinstance(c, str) else c.decode()
+            )
             mock_ntf.return_value = tmp_mock
 
             await runner._inject_bootstrap("cid123")
@@ -154,13 +162,14 @@ class TestInjectBootstrap:
 # run() — audit event on launch
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestRunAuditEvent:
     async def test_agent_launched_event_emitted(self):
         logger = CapturingLogger()
         adapter = await _make_mock_adapter()
         runner = _make_runner(container_id="cid42", logger=logger, adapter=adapter)
-        
+
         with patch.object(runner, "_inject_source"):
             with patch.object(runner, "_inject_bootstrap"):
                 await runner.run(_simple_agent, Policy(), "sess1", "agent1")
@@ -176,6 +185,7 @@ class TestRunAuditEvent:
 # ---------------------------------------------------------------------------
 # run() — normal completion
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestRunNormalCompletion:
@@ -207,16 +217,17 @@ class TestRunNormalCompletion:
 # run() — non-zero exit code
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestRunNonZeroExitCode:
     async def test_exit_code_one_propagated(self):
         adapter = await _make_mock_adapter()
-        
+
         async def fake_exec(container_id, command, **kwargs):
             if "pip" in command:
                 return ExecResult(exit_code=0, stdout="", stderr="")
             return ExecResult(exit_code=1, stdout="", stderr="")
-            
+
         adapter.exec_in_container.side_effect = fake_exec
         runner = _make_runner(adapter=adapter)
 
@@ -228,12 +239,12 @@ class TestRunNonZeroExitCode:
 
     async def test_non_zero_exit_code_propagated(self):
         adapter = await _make_mock_adapter()
-        
+
         async def fake_exec(container_id, command, **kwargs):
             if "pip" in command:
                 return ExecResult(exit_code=0, stdout="", stderr="")
             return ExecResult(exit_code=42, stdout="", stderr="")
-            
+
         adapter.exec_in_container.side_effect = fake_exec
         runner = _make_runner(adapter=adapter)
 
@@ -246,12 +257,12 @@ class TestRunNonZeroExitCode:
     async def test_oom_kill_detection(self):
         logger = CapturingLogger()
         adapter = await _make_mock_adapter()
-        
+
         async def fake_exec(container_id, command, **kwargs):
             if "pip" in command:
                 return ExecResult(exit_code=0, stdout="", stderr="")
             return ExecResult(exit_code=137, stdout="", stderr="")
-            
+
         adapter.exec_in_container.side_effect = fake_exec
         runner = _make_runner(logger=logger, adapter=adapter)
 

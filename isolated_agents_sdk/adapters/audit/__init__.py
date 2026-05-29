@@ -9,11 +9,11 @@ This package provides pluggable audit logger adapters for:
 Example usage:
     from isolated_agents_sdk.adapters.audit import FileAuditAdapter
     from isolated_agents_sdk.adapters.factory import AdapterFactory
-    
+
     # Create file audit adapter
     adapter = AdapterFactory.create_audit_adapter("file", log_path="/var/log/agents")
     await adapter.initialize()
-    
+
     # Log event
     await adapter.log_event(
         event_type="container_created",

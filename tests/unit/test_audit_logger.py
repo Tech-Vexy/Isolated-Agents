@@ -17,13 +17,13 @@ from datetime import datetime
 
 import pytest
 
-from isolated_agents_sdk.audit_logger import AuditLogger, VIOLATION_EVENT_TYPES
+from isolated_agents_sdk.audit_logger import VIOLATION_EVENT_TYPES, AuditLogger
 from isolated_agents_sdk.models import AuditEvent
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _capture_stderr(logger: AuditLogger, event_type: str, **kwargs) -> dict:
     """Call log_event and return the parsed JSON entry captured from stderr."""
@@ -60,11 +60,14 @@ class TestStructuredLogEntry:
     """Each event type produces a valid JSON entry with all required fields."""
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("event_type", [
-        "container_created",
-        "agent_launched",
-        "container_destroyed",
-    ])
+    @pytest.mark.parametrize(
+        "event_type",
+        [
+            "container_created",
+            "agent_launched",
+            "container_destroyed",
+        ],
+    )
     async def test_non_violation_event_emits_required_fields(self, event_type):
         logger = AuditLogger(log_output_path=None)
         entry = await _capture_stderr(logger, event_type)
@@ -151,6 +154,7 @@ class TestStructuredLogEntry:
 #                   agent_id, and attempted_action
 # ---------------------------------------------------------------------------
 
+
 class TestViolationEventFields:
     """Violation events must carry violation_type and attempted_action in payload."""
 
@@ -231,6 +235,7 @@ class TestViolationEventFields:
 # Requirement 8.3 – Write to file when log_output_path is set
 # ---------------------------------------------------------------------------
 
+
 class TestLogRoutingToFile:
     """When log_output_path is provided, entries go to that file, not stderr."""
 
@@ -262,9 +267,9 @@ class TestLogRoutingToFile:
         await logger.log_event("agent_launched", "s1", "a1", {})
         await logger.log_event("container_destroyed", "s1", "a1", {})
         with open(log_file, encoding="utf-8") as f:
-            lines = [l.strip() for l in f.readlines() if l.strip()]
+            lines = [line.strip() for line in f.readlines() if line.strip()]
         assert len(lines) == 3
-        event_types = [json.loads(l)["event_type"] for l in lines]
+        event_types = [json.loads(line)["event_type"] for line in lines]
         assert event_types == ["container_created", "agent_launched", "container_destroyed"]
 
     @pytest.mark.asyncio
@@ -303,6 +308,7 @@ class TestLogRoutingToFile:
 # Requirement 8.4 – Write to stderr when no log_output_path is specified
 # ---------------------------------------------------------------------------
 
+
 class TestLogRoutingToStderr:
     """When log_output_path is None, entries go to stderr."""
 
@@ -330,7 +336,7 @@ class TestLogRoutingToStderr:
         with unittest.mock.patch.object(sys, "stderr", buf):
             await logger.log_event("container_created", "s1", "a1", {})
             await logger.log_event("agent_launched", "s1", "a1", {})
-        lines = [l for l in buf.getvalue().splitlines() if l.strip()]
+        lines = [line for line in buf.getvalue().splitlines() if line.strip()]
         assert len(lines) == 2
         assert json.loads(lines[0])["event_type"] == "container_created"
         assert json.loads(lines[1])["event_type"] == "agent_launched"
@@ -356,6 +362,7 @@ class TestLogRoutingToStderr:
 # ---------------------------------------------------------------------------
 # emit() method – direct AuditEvent emission
 # ---------------------------------------------------------------------------
+
 
 class TestEmitMethod:
     """AuditLogger.emit() accepts an AuditEvent directly."""

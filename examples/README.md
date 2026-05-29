@@ -148,6 +148,12 @@ uv pip install isolated-agents-sdk
 Each example is self-contained and can be run directly:
 
 ```bash
+# Run the Simplified Agent API Example (Fluent config and decorator methods)
+python examples/simplified_agent_api.py
+
+# Run an agent natively from a TOML configuration file
+python examples/config_driven_agent.py
+
 # Python framework example
 python examples/frameworks/langchain/basic_agent.py
 

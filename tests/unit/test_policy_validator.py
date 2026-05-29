@@ -7,6 +7,7 @@ Covers:
 """
 
 import json
+
 import pytest
 
 from isolated_agents_sdk.exceptions import PolicyValidationError
@@ -22,6 +23,7 @@ def validator() -> PolicyValidator:
 # ---------------------------------------------------------------------------
 # Default values when None is passed
 # ---------------------------------------------------------------------------
+
 
 class TestDefaultPolicy:
     @pytest.mark.asyncio
@@ -95,6 +97,7 @@ class TestDefaultPolicy:
 # Unknown field rejection (Requirement 10.5)
 # ---------------------------------------------------------------------------
 
+
 class TestUnknownFieldRejection:
     def _from_json_with_extra(self, extra: dict) -> None:
         data = {"cpu_cores": 1.0, **extra}
@@ -134,6 +137,7 @@ class TestUnknownFieldRejection:
 # ---------------------------------------------------------------------------
 # Invalid field type rejection (Requirement 10.6)
 # ---------------------------------------------------------------------------
+
 
 class TestInvalidFieldTypeRejection:
     def _from_json(self, data: dict) -> None:

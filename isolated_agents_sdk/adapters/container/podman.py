@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import shutil
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
 from isolated_agents_sdk.adapters.container.types import (
@@ -30,21 +32,21 @@ _PODMAN_TIMEOUT_SECONDS = 300
 
 class PodmanAdapter(ContainerRuntimeAdapter):
     """Podman container runtime adapter.
-    
+
     Wraps Podman CLI commands to provide container lifecycle management.
     """
-    
+
     def __init__(
-        self, 
-        base_image: str = DEFAULT_IMAGE, 
-        socket_path: Optional[str] = None,
-        remote_url: Optional[str] = None,
+        self,
+        base_image: str = DEFAULT_IMAGE,
+        socket_path: str | None = None,
+        remote_url: str | None = None,
         use_remote: bool = False,
         timeout: float = _PODMAN_TIMEOUT_SECONDS,
-        **kwargs
+        **kwargs,
     ):
         """Initialize Podman adapter.
-        
+
         Args:
             base_image: Default container image to use
             socket_path: Path to Podman socket
@@ -60,19 +62,19 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         self._use_remote = use_remote
         self._timeout = timeout
         self._initialized = False
-    
+
     async def initialize(self) -> None:
         """Initialize the adapter and verify Podman is available."""
         if self._initialized:
             return
-        
+
         # Check if Podman is installed
         if shutil.which("podman") is None:
             raise PodmanNotFoundError(
                 "Podman is not installed or not accessible on PATH. "
                 "Please install Podman to use this adapter."
             )
-        
+
         # Verify connectivity
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -87,13 +89,13 @@ class PodmanAdapter(ContainerRuntimeAdapter):
 
         # Verify cgroups v2 support
         await self._check_cgroups_v2()
-        
+
         self._initialized = True
-    
+
     async def cleanup(self) -> None:
         """Cleanup adapter resources."""
         self._initialized = False
-    
+
     async def health_check(self) -> bool:
         """Check if the adapter is healthy and ready to use."""
         return await self.check_availability()
@@ -106,7 +108,7 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             return returncode == 0
         except Exception:
             return False
-    
+
     async def provision_container(
         self,
         image: str,
@@ -115,11 +117,11 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         resources: ResourceLimits,
         network: NetworkConfig,
         security: SecurityConfig,
-        env: Optional[dict[str, str]] = None,
-        working_dir: Optional[str] = None,
+        env: dict[str, str] | None = None,
+        working_dir: str | None = None,
     ) -> ContainerHandle:
         """Provision a new container.
-        
+
         Args:
             image: Container image to use
             mounts: List of volume mounts
@@ -129,16 +131,16 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             environment: Environment variables
             working_dir: Working directory inside container
             command: Command to run (default: tail -f /dev/null)
-        
+
         Returns:
             ContainerHandle with container ID
-        
+
         Raises:
             AdapterOperationError: If container creation fails
         """
         if not self._initialized:
             await self.initialize()
-        
+
         cmd = self._build_run_command(
             image=image,
             mounts=mounts,
@@ -149,30 +151,30 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             working_dir=working_dir,
             command=command,
         )
-        
+
         stdout, stderr, returncode = await self._run_podman(cmd)
-        
+
         if returncode != 0:
             raise AdapterOperationError(
                 f"Failed to create container (exit {returncode}): {stderr.decode()}"
             )
-        
+
         container_id = stdout.decode().strip()
         return ContainerHandle(container_id=container_id, image=image)
-    
+
     async def exec_in_container(
         self,
         container_id: str,
         command: list[str],
-        env: Optional[dict[str, str]] = None,
-        working_dir: Optional[str] = None,
-        timeout: Optional[float] = None,
-        user: Optional[str] = None,
-        on_stdout: Optional[Callable[[str], None]] = None,
-        on_stderr: Optional[Callable[[str], None]] = None,
+        env: dict[str, str] | None = None,
+        working_dir: str | None = None,
+        timeout: float | None = None,
+        user: str | None = None,
+        on_stdout: Callable[[str], None] | None = None,
+        on_stderr: Callable[[str], None] | None = None,
     ) -> ExecResult:
         """Execute a command in a running container.
-        
+
         Args:
             container_id: Container ID
             command: Command to execute
@@ -182,32 +184,32 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             user: User to run the command as (e.g. "root")
             on_stdout: Callback for real-time stdout
             on_stderr: Callback for real-time stderr
-        
+
         Returns:
             ExecResult with exit code and output
         """
         cmd = ["podman", "exec"]
-        
+
         if user:
             cmd.extend(["--user", user])
-            
+
         if working_dir:
             cmd.extend(["--workdir", working_dir])
-        
+
         if env:
             for key, value in env.items():
                 cmd.extend(["-e", f"{key}={value}"])
-        
+
         cmd.append(container_id)
         cmd.extend(command)
-        
+
         stdout, stderr, returncode = await self._run_podman(
-            cmd, 
+            cmd,
             timeout=timeout or self._timeout,
             on_stdout=on_stdout,
             on_stderr=on_stderr,
         )
-        
+
         return ExecResult(
             exit_code=returncode,
             stdout=stdout.decode(),
@@ -218,28 +220,28 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         self,
         container_id: str,
         command: list[str],
-        env: Optional[dict[str, str]] = None,
-        working_dir: Optional[str] = None,
-        user: Optional[str] = None,
+        env: dict[str, str] | None = None,
+        working_dir: str | None = None,
+        user: str | None = None,
     ) -> int:
         """Execute an interactive command in a running container."""
         import subprocess
 
         cmd = ["podman", "exec", "-it"]
-        
+
         if user:
             cmd.extend(["--user", user])
-            
+
         if working_dir:
             cmd.extend(["--workdir", working_dir])
-        
+
         if env:
             for key, value in env.items():
                 cmd.extend(["-e", f"{key}={value}"])
-        
+
         cmd.append(container_id)
         cmd.extend(command)
-        
+
         # We use a synchronous subprocess call here because it handles TTY/stdin
         # much more reliably than asyncio for interactive sessions.
         # This will block the event loop, but that's expected for an interactive shell.
@@ -247,7 +249,7 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             return subprocess.call(cmd)
         except Exception as e:
             raise AdapterOperationError(f"Interactive Podman command failed: {e}")
-    
+
     async def copy_from_container(
         self,
         container_id: str,
@@ -255,7 +257,7 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         dest_path: str,
     ) -> None:
         """Copy files from container to host.
-        
+
         Args:
             container_id: Container ID
             src_path: Path inside container
@@ -263,12 +265,10 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         """
         cmd = ["podman", "cp", f"{container_id}:{src_path}", dest_path]
         stdout, stderr, returncode = await self._run_podman(cmd)
-        
+
         if returncode != 0:
-            raise AdapterOperationError(
-                f"Failed to copy from container: {stderr.decode()}"
-            )
-    
+            raise AdapterOperationError(f"Failed to copy from container: {stderr.decode()}")
+
     async def copy_to_container(
         self,
         container_id: str,
@@ -276,7 +276,7 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         dest_path: str,
     ) -> None:
         """Copy files from host to container.
-        
+
         Args:
             container_id: Container ID
             src_path: Source path on host
@@ -284,29 +284,25 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         """
         cmd = ["podman", "cp", src_path, f"{container_id}:{dest_path}"]
         stdout, stderr, returncode = await self._run_podman(cmd)
-        
+
         if returncode != 0:
-            raise AdapterOperationError(
-                f"Failed to copy to container: {stderr.decode()}"
-            )
-    
+            raise AdapterOperationError(f"Failed to copy to container: {stderr.decode()}")
+
     async def get_container_stats(self, container_id: str) -> ContainerStats:
         """Get resource usage statistics for a container.
-        
+
         Args:
             container_id: Container ID
-        
+
         Returns:
             ContainerStats with CPU and memory usage
         """
         cmd = ["podman", "stats", "--no-stream", "--format", "json", container_id]
         stdout, stderr, returncode = await self._run_podman(cmd)
-        
+
         if returncode != 0:
-            raise AdapterOperationError(
-                f"Failed to get container stats: {stderr.decode()}"
-            )
-        
+            raise AdapterOperationError(f"Failed to get container stats: {stderr.decode()}")
+
         try:
             stats_list = json.loads(stdout.decode())
             if not stats_list:
@@ -314,7 +310,7 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             stats_data = stats_list[0]
         except (json.JSONDecodeError, IndexError):
             return ContainerStats(cpu_percent=0.0, memory_mb=0.0, memory_limit_mb=0.0)
-        
+
         return ContainerStats(
             cpu_percent=float(stats_data.get("CPUPerc", "0").rstrip("%")),
             memory_mb=self._parse_memory(stats_data.get("MemUsage", "0B")),
@@ -322,15 +318,15 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             network_rx_bytes=0,
             network_tx_bytes=0,
         )
-    
+
     async def destroy_container(
         self,
         container_id: str,
         force: bool = True,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> None:
         """Destroy a container.
-        
+
         Args:
             container_id: Container ID
             force: Force removal even if running
@@ -340,7 +336,7 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         if force:
             cmd.append("-f")
         cmd.append(container_id)
-        
+
         await self._run_podman(cmd, timeout=timeout or self._timeout)
 
     def destroy_container_sync(
@@ -353,17 +349,18 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         if force:
             cmd.append("-f")
         cmd.append(container_id)
-        
+
         try:
             import subprocess
+
             subprocess.run(cmd, capture_output=True, check=False)
         except Exception:
             pass
-    
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    
+
     def _build_run_command(
         self,
         image: str,
@@ -372,18 +369,19 @@ class PodmanAdapter(ContainerRuntimeAdapter):
         network_config: NetworkConfig,
         security_config: SecurityConfig,
         environment: dict[str, str],
-        working_dir: Optional[str],
-        command: Optional[list[str]],
+        working_dir: str | None,
+        command: list[str] | None,
     ) -> list[str]:
         """Build podman run command from parameters."""
         cmd = [
-            "podman", "run",
+            "podman",
+            "run",
             "--detach",
             "--userns=keep-id",
             "--pid=private",
             "--security-opt=no-new-privileges",
         ]
-        
+
         # User
         if security_config.user:
             cmd.append(f"--user={security_config.user}")
@@ -394,17 +392,17 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             except AttributeError:
                 uid, gid = 1000, 1000
             cmd.append(f"--user={uid}:{gid}")
-        
+
         # Capabilities
         for cap in security_config.cap_drop:
             cmd.append(f"--cap-drop={cap}")
         for cap in security_config.cap_add:
             cmd.append(f"--cap-add={cap}")
-        
+
         # Seccomp
         if security_config.seccomp_profile:
             cmd.append(f"--security-opt=seccomp={security_config.seccomp_profile}")
-        
+
         # Read-only rootfs
         if security_config.read_only_rootfs:
             cmd.append("--read-only")
@@ -412,13 +410,13 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             size_opt = f"size={security_config.tmpfs_size_mb}m"
             cmd.extend(["--tmpfs", f"/tmp:rw,nosuid,nodev,{size_opt}"])
             cmd.extend(["--tmpfs", "/run:rw,noexec,nosuid,nodev,size=64m"])
-            
-            # v0.2.1 Filter: Only add the default /output tmpfs if it wasn't already 
+
+            # v0.2.1 Filter: Only add the default /output tmpfs if it wasn't already
             # explicitly requested as a mount. This prevents "duplicate mount destination" errors.
             explicit_targets = [m.target for m in mounts]
             if "/output" not in explicit_targets:
                 cmd.extend(["--tmpfs", f"/output:rw,noexec,nosuid,nodev,{size_opt}"])
-        
+
         # Network
         if network_config.disabled:
             cmd.append("--network=none")
@@ -426,37 +424,37 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             # Use 'bridge' network which is more standard across Podman installations
             cmd.append("--network=bridge")
             cmd.append("--dns=8.8.8.8")
-            
+
             if network_config.allowed_endpoints:
                 # Note: Podman --add-host requires host:IP format.
                 # Since we use 8.8.8.8 DNS, we don't need to manually map public endpoints.
                 # True network whitelisting should be handled by a network policy provider.
                 pass
-            
+
             # Ingress Ports: Expose ports on the container
             for port in network_config.ingress_ports:
                 # Mapping host port same as container port for simplicity in basic adapter
                 cmd.extend(["-p", f"{port}:{port}"])
-        
+
         # Resources
         cmd.append(f"--cpus={resource_limits.cpu_cores}")
-        
+
         # CPU Optimization: Assign CPU shares proportional to the core count
         # (1024 shares = 1 core). This improves scheduled latency under load.
         cpu_shares = int(resource_limits.cpu_cores * 1024)
         cmd.append(f"--cpu-shares={cpu_shares}")
-        
+
         cmd.append(f"--memory={resource_limits.memory_mb}m")
         cmd.append(f"--memory-swap={resource_limits.memory_mb}m")
-        
-        # Optimization: Set reserved memory (soft limit) to 25% of hard limit 
+
+        # Optimization: Set reserved memory (soft limit) to 25% of hard limit
         # for better host density and faster startup, except for heavy workloads.
         memory_reservation = int(resource_limits.memory_mb * 0.25)
         cmd.append(f"--memory-reservation={memory_reservation}m")
-        
+
         shm_size = int(resource_limits.memory_mb * 0.5)
         cmd.append(f"--shm-size={shm_size}m")
-        
+
         # Mounts
         for mount in mounts:
             if mount.source == "tmpfs":
@@ -469,35 +467,35 @@ class PodmanAdapter(ContainerRuntimeAdapter):
                 mode = "ro" if mount.readonly else "rw"
                 # Compatibility: Use :Z suffix for SELinux relabeling if needed
                 cmd.extend(["-v", f"{mount.source}:{mount.target}:{mode},nosuid,nodev"])
-        
+
         # Environment
         for key, value in environment.items():
             cmd.extend(["-e", f"{key}={value}"])
-        
+
         # Working directory
         if working_dir:
             cmd.extend(["--workdir", working_dir])
-        
+
         # Image
         # Optimization: Use --pull=never if possible to avoid network latency during startup
         # for images that should already be present.
         cmd.append("--pull=missing")
         cmd.append(image)
-        
+
         # Command
         if command:
             cmd.extend(command)
         else:
             cmd.extend(["tail", "-f", "/dev/null"])
-        
+
         return cmd
-    
+
     async def _run_podman(
         self,
         cmd: list[str],
         timeout: float = _PODMAN_TIMEOUT_SECONDS,
-        on_stdout: Optional[Callable[[str], None]] = None,
-        on_stderr: Optional[Callable[[str], None]] = None,
+        on_stdout: Callable[[str], None] | None = None,
+        on_stderr: Callable[[str], None] | None = None,
     ) -> tuple[bytes, bytes, int]:
         """Run a Podman command and return (stdout, stderr, returncode)."""
         # Inject remote flags if configured
@@ -519,7 +517,7 @@ class PodmanAdapter(ContainerRuntimeAdapter):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            
+
             stdout_data = bytearray()
             stderr_data = bytearray()
 
@@ -530,10 +528,8 @@ class PodmanAdapter(ContainerRuntimeAdapter):
                         break
                     data.extend(chunk)
                     if callback:
-                        try:
+                        with contextlib.suppress(Exception):
                             callback(chunk.decode(errors="replace"))
-                        except Exception:
-                            pass
 
             # Use wait_for on the gather of stream readers and process wait
             await asyncio.wait_for(
@@ -544,10 +540,10 @@ class PodmanAdapter(ContainerRuntimeAdapter):
                 ),
                 timeout=timeout,
             )
-            
+
             return bytes(stdout_data), bytes(stderr_data), proc.returncode or 0
-        
-        except asyncio.TimeoutError:
+
+        except TimeoutError:
             if proc:
                 try:
                     proc.kill()
@@ -559,14 +555,14 @@ class PodmanAdapter(ContainerRuntimeAdapter):
             )
         except Exception as e:
             raise AdapterOperationError(f"Podman command failed: {e}")
-    
+
     async def _check_cgroups_v2(self) -> None:
         """Check if cgroups v2 is available (required for rootless resource limits)."""
         cgroup_path = Path("/sys/fs/cgroup/cgroup.controllers")
         if not cgroup_path.exists():
             # cgroups v2 not available, but don't fail - just log warning
             pass
-    
+
     def _parse_memory(self, mem_str: str) -> float:
         """Parse memory string like '123.4MiB' to MB."""
         mem_str = mem_str.strip()

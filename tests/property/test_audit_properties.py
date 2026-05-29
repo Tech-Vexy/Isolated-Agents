@@ -14,9 +14,10 @@ import sys
 import tempfile
 import unittest.mock
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
-from isolated_agents_sdk.audit_logger import AuditLogger, VIOLATION_EVENT_TYPES
+from isolated_agents_sdk.audit_logger import VIOLATION_EVENT_TYPES, AuditLogger
 
 # ---------------------------------------------------------------------------
 # Strategies

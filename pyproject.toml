@@ -45,6 +45,10 @@ examples = [
     "redis",
     "pika",
 ]
+config = [
+    "pyyaml>=6.0",
+    "tomli-w>=1.0",
+]
 
 [project.scripts]
 isolated-agents = "isolated_agents_sdk.__main__:main"
@@ -86,17 +90,15 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-# Conservative baseline: catch real bugs (pyflakes F-rules) without
-# failing on the project's existing style/whitespace debt. Tighten by
-# adding E, W, I, B, UP, SIM categories once the codebase is cleaned up.
+# Tightened linting rules
 select = [
-    "F",     # pyflakes — undefined names, unused imports, syntax issues
-    "E711",  # comparison to None
-    "E712",  # comparison to True/False
-    "E713",  # not-in test
-    "E714",  # not-is test
-    "E721",  # type-comparison
-    "E722",  # bare except
+    "F",     # pyflakes
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
 ]
 ignore = [
     "F401",  # unused imports — many intentional re-exports in __init__ files

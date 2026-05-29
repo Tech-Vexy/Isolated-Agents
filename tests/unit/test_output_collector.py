@@ -8,48 +8,56 @@ Covers:
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
+from isolated_agents_sdk.adapters.container.types import ExecResult
+from isolated_agents_sdk.adapters.storage.base import StorageAdapter
+from isolated_agents_sdk.adapters.storage.types import StorageLocation
 from isolated_agents_sdk.audit_logger import AuditLogger
 from isolated_agents_sdk.exceptions import OutputSizeLimitError
 from isolated_agents_sdk.models import AgentResult, Policy
 from isolated_agents_sdk.output_collector import OutputCollector
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-from isolated_agents_sdk.adapters.container.base import ContainerRuntimeAdapter
-from isolated_agents_sdk.adapters.container.types import ExecResult
-from isolated_agents_sdk.adapters.storage.base import StorageAdapter
-from isolated_agents_sdk.adapters.storage.types import StorageLocation
 
 async def _make_mock_container_adapter():
     adapter = MagicMock(spec=ContainerRuntimeAdapter)
-    adapter.exec_in_container = AsyncMock(return_value=ExecResult(exit_code=0, stdout="", stderr=""))
+    adapter.exec_in_container = AsyncMock(
+        return_value=ExecResult(exit_code=0, stdout="", stderr="")
+    )
     adapter.copy_from_container = AsyncMock()
     adapter.get_adapter_name = MagicMock(return_value="MockContainerAdapter")
     return adapter
 
+
 async def _make_mock_storage_adapter():
     adapter = MagicMock(spec=StorageAdapter)
     adapter.initialize = AsyncMock()
-    adapter.store_artifact = AsyncMock(return_value=StorageLocation(session_id="s", artifact_name="a", path="/fake/path"))
+    adapter.store_artifact = AsyncMock(
+        return_value=StorageLocation(session_id="s", artifact_name="a", path="/fake/path")
+    )
     adapter.get_adapter_name = MagicMock(return_value="MockStorageAdapter")
     return adapter
+
 
 CONTAINER_ID = "abc123"
 OUTPUT_PATH = "/output"
 SESSION_ID = "sess-001"
 AGENT_ID = "agent-001"
 
-def _make_collector(container_adapter=None, storage_adapter=None, audit_logger=None) -> OutputCollector:
+
+def _make_collector(
+    container_adapter=None, storage_adapter=None, audit_logger=None
+) -> OutputCollector:
     return OutputCollector(
         container_adapter=container_adapter,
         storage_adapter=storage_adapter,
-        audit_logger=audit_logger or MagicMock(spec=AuditLogger)
+        audit_logger=audit_logger or MagicMock(spec=AuditLogger),
     )
 
 
@@ -138,6 +146,7 @@ class TestMissingOutputPath:
     async def test_warning_is_logged_on_missing_path(self, tmp_path: Path, caplog) -> None:
         """A warning is emitted to the Python logger when the output path is absent."""
         import logging
+
         adapter = await _make_mock_container_adapter()
         adapter.exec_in_container.return_value = ExecResult(exit_code=1, stdout="", stderr="")
         collector = _make_collector(container_adapter=adapter)
@@ -199,7 +208,7 @@ class TestOutputSizeLimit:
         find_output = "\n".join(f"{OUTPUT_PATH}/{name}" for name in files)
 
         container_adapter = await _make_mock_container_adapter()
-        
+
         async def fake_exec(cid, cmd, **kwargs):
             if "test" in cmd:
                 return ExecResult(exit_code=0, stdout="", stderr="")
@@ -214,6 +223,7 @@ class TestOutputSizeLimit:
             src_file = fake_output_dir / filename
             if src_file.exists():
                 import shutil as _shutil
+
                 _shutil.copy2(str(src_file), dest)
 
         container_adapter.copy_from_container.side_effect = fake_cp

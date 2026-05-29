@@ -1,0 +1,33 @@
+[default_policy]
+cpu_cores = 1.0
+memory_mb = 1024
+timeout_seconds = 120
+
+[default_policy.network]
+disabled = true
+
+[agents.web_scraper]
+workspace = "./workspace/scraper_demo"
+description = "Agent that scrapes public data"
+
+[agents.web_scraper.policy.network]
+disabled = false
+allowed_endpoints = [
+    "api.github.com:443"
+]
+
+[agents.web_scraper.policy]
+pip_packages = [
+    "requests",
+    "beautifulsoup4"
+]
+
+[agents.data_processor]
+workspace = "./workspace/processor_demo"
+description = "Agent that processes scraped data"
+
+[agents.data_processor.policy]
+memory_mb = 2048
+pip_packages = [
+    "pandas"
+]

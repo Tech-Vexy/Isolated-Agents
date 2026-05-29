@@ -9,12 +9,13 @@ from typing import Optional
 @dataclass
 class ContainerHandle:
     """Handle to a running or stopped container.
-    
+
     Attributes:
         container_id: Unique identifier for the container
         image: Container image name (e.g., "python:3.11-slim")
         created_at: ISO 8601 timestamp of container creation
     """
+
     container_id: str
     image: str = ""
     created_at: str = ""
@@ -23,12 +24,13 @@ class ContainerHandle:
 @dataclass
 class ExecResult:
     """Result of executing a command in a container.
-    
+
     Attributes:
         exit_code: Process exit code (0 = success)
         stdout: Standard output as string
         stderr: Standard error as string
     """
+
     exit_code: int
     stdout: str
     stderr: str
@@ -37,7 +39,7 @@ class ExecResult:
 @dataclass
 class ContainerStats:
     """Container resource usage statistics.
-    
+
     Attributes:
         cpu_percent: Current CPU usage as percentage (0-100+)
         memory_mb: Current memory usage in megabytes
@@ -45,6 +47,7 @@ class ContainerStats:
         network_rx_bytes: Network bytes received
         network_tx_bytes: Network bytes transmitted
     """
+
     cpu_percent: float
     memory_mb: float
     memory_limit_mb: float
@@ -55,37 +58,39 @@ class ContainerStats:
 @dataclass
 class Mount:
     """Container mount specification.
-    
+
     Attributes:
         source: Host path to mount (or 'tmpfs' for internal ephemeral storage)
         target: Container path where source is mounted
         readonly: If True, mount is read-only
         size_mb: For tmpfs mounts, the size limit in MiB.
     """
+
     source: str
     target: str
     readonly: bool = False
-    size_mb: Optional[int] = None
+    size_mb: int | None = None
 
 
 @dataclass
 class ResourceLimits:
     """Container resource limits.
-    
+
     Attributes:
         cpu_cores: Maximum CPU cores (e.g., 1.0, 2.5)
         memory_mb: Maximum memory in megabytes
         memory_swap_mb: Maximum swap memory in megabytes (None = no swap)
     """
+
     cpu_cores: float
     memory_mb: int
-    memory_swap_mb: Optional[int] = None
+    memory_swap_mb: int | None = None
 
 
 @dataclass
 class NetworkConfig:
     """Container network configuration.
-    
+
     Attributes:
         disabled: If True, container has no network access
         allowed_endpoints: List of allowed endpoints in "host:port" or CIDR format
@@ -93,6 +98,7 @@ class NetworkConfig:
         grpc: Enable gRPC protocol support
         ingress_ports: List of ports to expose on the container for incoming connections
     """
+
     disabled: bool = True
     allowed_endpoints: list[str] = field(default_factory=list)
     websockets: bool = False
@@ -103,7 +109,7 @@ class NetworkConfig:
 @dataclass
 class SecurityConfig:
     """Container security configuration.
-    
+
     Attributes:
         cap_drop: Linux capabilities to drop (default: ["ALL"])
         cap_add: Linux capabilities to add back after drop
@@ -113,12 +119,14 @@ class SecurityConfig:
         user: UID:GID string for container user (None = derive from host)
         tmpfs_size_mb: Default size for automatically created tmpfs mounts (/tmp)
     """
+
     cap_drop: list[str] = field(default_factory=lambda: ["ALL"])
     cap_add: list[str] = field(default_factory=list)
     read_only_rootfs: bool = True
     no_new_privileges: bool = True
-    seccomp_profile: Optional[str] = None
-    user: Optional[str] = None
+    seccomp_profile: str | None = None
+    user: str | None = None
     tmpfs_size_mb: int = 512
+
 
 # Made with Bob

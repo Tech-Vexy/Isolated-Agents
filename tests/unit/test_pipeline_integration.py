@@ -10,9 +10,10 @@ Verifies:
 
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -25,10 +26,10 @@ from isolated_agents_sdk import (
 from isolated_agents_sdk.adapters import AdapterRegistry
 from isolated_agents_sdk.exceptions import PodmanNotFoundError, WorkingDirectoryError
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _make_mock_proc(exit_code: int = 0, stdout: bytes = b"", stderr: bytes = b""):
     """Return a mock asyncio subprocess that finishes immediately."""
@@ -48,6 +49,7 @@ async def _make_mock_proc(exit_code: int = 0, stdout: bytes = b"", stderr: bytes
 
 def _make_fake_podman_exec(container_id: str = "cid", exit_code_on_exec: int = 0):
     """Return a side_effect function for asyncio.create_subprocess_exec that simulates Podman."""
+
     async def fake_exec(*args, **kwargs):
         cmd = list(args)
         exit_code = 0
@@ -72,7 +74,7 @@ def _make_fake_podman_exec(container_id: str = "cid", exit_code_on_exec: int = 0
                 else:
                     exit_code = exit_code_on_exec
             elif subcmd == "cp":
-                if ":" in cmd[2]: # src is container
+                if ":" in cmd[2]:  # src is container
                     try:
                         dest = Path(cmd[3])
                         if not dest.parent.exists():
@@ -80,14 +82,12 @@ def _make_fake_podman_exec(container_id: str = "cid", exit_code_on_exec: int = 0
                         dest.write_bytes(b"hello from agent")
                     except Exception:
                         pass
-                else: # src is host
+                else:  # src is host
                     exit_code = 0
             elif subcmd == "rm":
                 exit_code = 0
-            elif subcmd == "--version":
+            elif subcmd == "--version" or subcmd == "version":
                 stdout = b"podman version 4.6.0\n"
-            elif subcmd == "version":
-                 stdout = b"podman version 4.6.0\n"
 
         return await _make_mock_proc(exit_code, stdout, stderr)
 
@@ -99,6 +99,7 @@ fake_exec = _make_fake_podman_exec()
 
 def _make_fake_podman_exec_no_output(container_id: str = "test-container-abc123"):
     """Variant where the output path does NOT exist in the container."""
+
     async def fake_exec(*args, **kwargs):
         cmd = list(args)
         exit_code = 0
@@ -116,7 +117,7 @@ def _make_fake_podman_exec_no_output(container_id: str = "test-container-abc123"
 
             elif subcmd == "rm":
                 exit_code = 0
-            
+
             elif subcmd == "--version":
                 stdout = b"podman version 4.6.0\n"
 
@@ -156,15 +157,18 @@ def reset_registry():
 # Happy Path
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestRunAgentHappyPath:
     """run_agent() should complete successfully and return an AgentResult."""
 
     async def test_returns_agent_result(self, working_dir):
         """Happy path: async_run_agent returns an AgentResult (Req 1.1)."""
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_exec), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_exec),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             result = await async_run_agent(_trivial_agent, working_dir)
 
         assert isinstance(result, AgentResult)
@@ -173,43 +177,53 @@ class TestRunAgentHappyPath:
         assert "result.txt" in result.artifacts
 
     async def test_exit_code_zero_on_success(self, working_dir):
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_exec), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_exec),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             result = await async_run_agent(_trivial_agent, working_dir)
 
         assert result.exit_code == 0
 
     async def test_session_id_is_set_in_result(self, working_dir):
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_exec), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_exec),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             result = await async_run_agent(_trivial_agent, working_dir)
 
         assert result.session_id
 
     async def test_artifacts_returned_from_output_path(self, working_dir):
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_exec), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_exec),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             result = await async_run_agent(_trivial_agent, working_dir)
 
         assert "result.txt" in result.artifacts
 
     async def test_run_agent_with_explicit_policy(self, working_dir):
         policy = Policy(cpu_cores=0.5, memory_mb=256)
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_exec), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_exec),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             result = await async_run_agent(_trivial_agent, working_dir, policy=policy)
 
         assert isinstance(result, AgentResult)
 
     async def test_artifacts_written_to_host_output_path(self, working_dir, tmp_path):
         host_out = tmp_path / "agent_output"
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_exec), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_exec),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             result = await async_run_agent(_trivial_agent, working_dir, host_output_path=host_out)
 
         # Artifacts in memory (now as paths)
@@ -225,6 +239,7 @@ class TestRunAgentHappyPath:
 # Output Artifacts
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestOutputArtifacts:
     """Artifact collection logic and constraints."""
@@ -232,21 +247,25 @@ class TestOutputArtifacts:
     async def test_no_artifacts_if_output_dir_missing(self, working_dir):
         """Result artifacts are empty if the container's output dir is missing."""
         fake_exec_no_out = _make_fake_podman_exec_no_output()
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_exec_no_out), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_exec_no_out),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             result = await async_run_agent(_trivial_agent, working_dir)
 
         assert result.artifacts == {}
 
     async def test_artifacts_contain_file_paths(self, working_dir):
         """Returned artifacts map names to local file paths (Req 6.1)."""
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_exec), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_exec),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             result = await async_run_agent(_trivial_agent, working_dir)
 
-        for name, path in result.artifacts.items():
+        for _name, path in result.artifacts.items():
             assert os.path.isabs(path)
             assert os.path.exists(path)
 
@@ -254,9 +273,11 @@ class TestOutputArtifacts:
         """A non-zero exit code is propagated; result is still returned (Req 6.5)."""
         fake_exec_fail = _make_fake_podman_exec(exit_code_on_exec=1)
 
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_exec_fail), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_exec_fail),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             result = await async_run_agent(_trivial_agent, working_dir)
 
         assert isinstance(result, AgentResult)
@@ -268,26 +289,31 @@ class TestOutputArtifacts:
 # Session Lifecycle
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestSessionCleanup:
     """Ensuring containers are removed even on failure."""
 
     async def test_container_destroyed_after_successful_run(self, working_dir):
         rm_calls = []
+
         async def spy_exec(*args, **kwargs):
             if "rm" in args:
                 rm_calls.append(args)
             return await fake_exec(*args, **kwargs)
 
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=spy_exec), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=spy_exec),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             await async_run_agent(_trivial_agent, working_dir)
 
         assert any("rm" in cmd for cmd in rm_calls), "podman rm should have been called"
 
     async def test_container_destroyed_after_failed_run(self, working_dir):
         rm_calls = []
+
         async def spy_exec(*args, **kwargs):
             if "rm" in args:
                 rm_calls.append(args)
@@ -296,40 +322,46 @@ class TestSessionCleanup:
         def failing_agent():
             raise RuntimeError("Agent failed")
 
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=spy_exec), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
-            try:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=spy_exec),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
+            with contextlib.suppress(RuntimeError):
                 await async_run_agent(failing_agent, working_dir)
-            except RuntimeError:
-                pass
 
         assert any("rm" in cmd for cmd in rm_calls)
 
     async def test_session_removed_from_registry_after_completion(self, working_dir):
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_exec), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_exec),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             await async_run_agent(_trivial_agent, working_dir)
 
         assert sdk.list_sessions() == []
 
     async def test_container_destroyed_even_when_output_collection_raises(self, working_dir):
         rm_calls = []
+
         async def spy_exec(*args, **kwargs):
             if "rm" in args:
                 rm_calls.append(args)
             return await fake_exec(*args, **kwargs)
 
         # Patch OutputCollector.collect to raise an exception
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=spy_exec), \
-             patch("isolated_agents_sdk.output_collector.OutputCollector.collect", side_effect=Exception("Collect error")), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
-            try:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=spy_exec),
+            patch(
+                "isolated_agents_sdk.output_collector.OutputCollector.collect",
+                side_effect=Exception("Collect error"),
+            ),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
+            with contextlib.suppress(Exception):
                 await async_run_agent(_trivial_agent, working_dir)
-            except Exception:
-                pass
 
         assert any("rm" in cmd for cmd in rm_calls)
 
@@ -338,15 +370,15 @@ class TestSessionCleanup:
 # Pre-launch Errors
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 class TestPreLaunchErrors:
     """Errors that occur before the container starts."""
 
     async def test_podman_not_found_raises_before_execution(self, working_dir):
         """PodmanNotFoundError is raised when Podman is absent from PATH."""
-        with patch("shutil.which", return_value=None):
-            with pytest.raises(PodmanNotFoundError):
-                await async_run_agent(_trivial_agent, working_dir)
+        with patch("shutil.which", return_value=None), pytest.raises(PodmanNotFoundError):
+            await async_run_agent(_trivial_agent, working_dir)
 
     async def test_missing_working_dir_raises_working_directory_error(self, tmp_path):
         """WorkingDirectoryError is raised if the provided path doesn't exist."""
@@ -358,16 +390,15 @@ class TestPreLaunchErrors:
         """No podman commands should be run if basic validation fails."""
         missing_dir = tmp_path / "non-existent"
         with patch("asyncio.create_subprocess_exec") as mock_exec:
-            try:
+            with contextlib.suppress(WorkingDirectoryError):
                 await async_run_agent(_trivial_agent, missing_dir)
-            except WorkingDirectoryError:
-                pass
             assert not mock_exec.called
 
 
 # ---------------------------------------------------------------------------
 # List Sessions
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 class TestListSessions:
@@ -377,9 +408,11 @@ class TestListSessions:
         assert sdk.list_sessions() == []
 
     async def test_list_sessions_empty_after_run_completes(self, working_dir):
-        with patch("shutil.which", return_value="/usr/bin/podman"), \
-             patch("asyncio.create_subprocess_exec", side_effect=fake_exec), \
-             patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp:
+        with (
+            patch("shutil.which", return_value="/usr/bin/podman"),
+            patch("asyncio.create_subprocess_exec", side_effect=fake_exec),
+            patch("isolated_agents_sdk.agent_runner.cloudpickle") as mock_cp,
+        ):
             await async_run_agent(_trivial_agent, working_dir)
 
         assert sdk.list_sessions() == []

@@ -14,6 +14,7 @@ from isolated_agents_sdk.models import Policy
 # Detect if adapters are available
 try:
     from isolated_agents_sdk.adapters.factory import AdapterFactory
+
     _ADAPTERS_AVAILABLE = True
 except ImportError:
     _ADAPTERS_AVAILABLE = False
@@ -33,7 +34,7 @@ class PolicyValidator:
     - Raises descriptive validation errors for malformed policies.
     """
 
-    def __init__(self, adapter: Optional[IPolicyValidator] = None) -> None:
+    def __init__(self, adapter: IPolicyValidator | None = None) -> None:
         if adapter:
             self._adapter = adapter
         elif _ADAPTERS_AVAILABLE:
@@ -43,7 +44,7 @@ class PolicyValidator:
                 self._adapter = DefaultPolicyValidator()
         else:
             self._adapter = DefaultPolicyValidator()
-            
+
         self._initialized = False
 
     async def _ensure_initialized(self) -> None:
@@ -61,16 +62,15 @@ class PolicyValidator:
 
         if policy is None:
             return Policy()
-        
+
         if not isinstance(policy, Policy):
-            raise TypeError(
-                f"Expected a Policy instance or None, got {type(policy).__name__}"
-            )
+            raise TypeError(f"Expected a Policy instance or None, got {type(policy).__name__}")
 
         result = await self._adapter.validate_policy(policy)
-        
+
         if not result.is_valid and result.errors:
             from isolated_agents_sdk.exceptions import PolicyValidationError
+
             error = result.errors[0]
             raise PolicyValidationError(
                 f"Policy validation failed: {error.message}",

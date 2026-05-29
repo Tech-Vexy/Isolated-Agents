@@ -8,11 +8,13 @@ from __future__ import annotations
 import asyncio
 import functools
 import inspect
-from typing import Any, Callable, List, TypeVar, Optional, Dict
+from collections.abc import Callable
+from typing import Any, Dict, List, Optional, TypeVar
 
 from isolated_agents_sdk.models import AgentResult
 
 F = TypeVar("F", bound=Callable[..., Any])
+
 
 def _run_sync(coro):
     """Safely run a coroutine from a synchronous context, even if a loop is already running."""
@@ -45,7 +47,7 @@ def _run_sync(coro):
 
 
 def chain(
-    agents: List[Callable],
+    agents: list[Callable],
     data_flow: str = "sequential",
 ) -> Callable[[F], Callable[..., Any]]:
     """Decorator to compose multiple agents into a sequential pipeline.
@@ -61,9 +63,10 @@ def chain(
         def content_pipeline(topic: str):
             pass
     """
+
     def decorator(func: F) -> Callable[..., Any]:
         @functools.wraps(func)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> List[AgentResult]:
+        async def async_wrapper(*args: Any, **kwargs: Any) -> list[AgentResult]:
             results = []
             current_args = args
             current_kwargs = kwargs
@@ -79,11 +82,11 @@ def chain(
                 else:
                     res = agent(*current_args, **current_kwargs)
                 results.append(res)
-            
+
             return results
 
         @functools.wraps(func)
-        def sync_wrapper(*args: Any, **kwargs: Any) -> List[AgentResult]:
+        def sync_wrapper(*args: Any, **kwargs: Any) -> list[AgentResult]:
             # If any agent is async or func was intended to be async, run them loop-safely
             if any(inspect.iscoroutinefunction(a) for a in agents):
                 return _run_sync(async_wrapper(*args, **kwargs))
@@ -100,22 +103,23 @@ def chain(
 
                 res = agent(*current_args, **current_kwargs)
                 results.append(res)
-            
+
             return results
 
         # Decide which wrapper to return based on the original function type.
         # If the USER defined 'async def func', they want an async result.
         if inspect.iscoroutinefunction(func):
             return async_wrapper
-        
+
         # If it's a 'def func', they want a sync call.
         return sync_wrapper
 
     return decorator
 
+
 def parallel(
-    agents: List[Callable],
-    max_concurrent: Optional[int] = None,
+    agents: list[Callable],
+    max_concurrent: int | None = None,
 ) -> Callable[[F], Callable[..., Any]]:
     """Decorator to execute multiple agents concurrently.
 
@@ -123,28 +127,33 @@ def parallel(
         agents: List of agent callables to execute in parallel.
         max_concurrent: Maximum number of concurrent agents (None for unlimited).
     """
+
     def decorator(func: F) -> Callable[..., Any]:
         @functools.wraps(func)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> List[AgentResult]:
+        async def async_wrapper(*args: Any, **kwargs: Any) -> list[AgentResult]:
             if max_concurrent:
                 semaphore = asyncio.Semaphore(max_concurrent)
+
                 async def sem_agent(a):
                     async with semaphore:
                         if inspect.iscoroutinefunction(a):
                             return await a(*args, **kwargs)
                         return a(*args, **kwargs)
+
                 tasks = [sem_agent(agent) for agent in agents]
             else:
+
                 async def maybe_async(a):
                     if inspect.iscoroutinefunction(a):
                         return await a(*args, **kwargs)
                     return a(*args, **kwargs)
+
                 tasks = [maybe_async(agent) for agent in agents]
-            
+
             return await asyncio.gather(*tasks)
 
         @functools.wraps(func)
-        def sync_wrapper(*args: Any, **kwargs: Any) -> List[AgentResult]:
+        def sync_wrapper(*args: Any, **kwargs: Any) -> list[AgentResult]:
             return _run_sync(async_wrapper(*args, **kwargs))
 
         if inspect.iscoroutinefunction(func):
@@ -157,14 +166,15 @@ def parallel(
 class StateGraph:
     """Graph-based multi-agent orchestrator.
 
-    Allows defining nodes (agents) and transitions (edges) and maintains 
+    Allows defining nodes (agents) and transitions (edges) and maintains
     a shared state across the execution.
     """
+
     def __init__(self, state_schema: Any = None):
-        self.nodes: Dict[str, Callable] = {}
-        self.edges: Dict[str, str] = {}
-        self.conditional_edges: Dict[str, tuple[Callable, dict[str, str]]] = {}
-        self.entry_point: Optional[str] = None
+        self.nodes: dict[str, Callable] = {}
+        self.edges: dict[str, str] = {}
+        self.conditional_edges: dict[str, tuple[Callable, dict[str, str]]] = {}
+        self.entry_point: str | None = None
         self.finish_node = "__END__"
         self.state_schema = state_schema
 
@@ -197,13 +207,13 @@ class StateGraph:
             current_state = initial_state or {}
             if not isinstance(current_state, dict):
                 current_state = {"input": current_state}
-            
+
             # Mix in extra kwargs into state
             current_state.update(kwargs)
-            
+
             current_node = self.entry_point
             steps = 0
-            
+
             while current_node and current_node != self.finish_node:
                 if steps >= max_steps:
                     raise RuntimeError(
@@ -211,15 +221,15 @@ class StateGraph:
                         "Possible infinite loop or complex graph without enough steps."
                     )
                 steps += 1
-                
+
                 agent = self.nodes[current_node]
-                
+
                 # 1. Execute the agent node
                 if inspect.iscoroutinefunction(agent):
                     res = await agent(current_state)
                 else:
                     res = agent(current_state)
-                
+
                 # 2. Update state from result
                 if isinstance(res, AgentResult):
                     # If AgentResult, we prefer the 'output' field if it is a dict
@@ -231,7 +241,7 @@ class StateGraph:
                     current_state.update(res)
                 else:
                     current_state[f"{current_node}_result"] = res
-                
+
                 # 3. Determine next node
                 if current_node in self.conditional_edges:
                     router, mapping = self.conditional_edges[current_node]
@@ -241,7 +251,7 @@ class StateGraph:
                     current_node = self.edges[current_node]
                 else:
                     current_node = self.finish_node
-            
+
             return current_state
-            
+
         return runnable

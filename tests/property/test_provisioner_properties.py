@@ -7,11 +7,15 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from hypothesis import given, settings, strategies as st
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
+from isolated_agents_sdk.adapters.container.types import (
+    NetworkConfig,
+    ResourceLimits,
+    SecurityConfig,
+)
 from isolated_agents_sdk.models import NetworkPolicy, Policy
-from isolated_agents_sdk.adapters.container.types import ResourceLimits, NetworkConfig, SecurityConfig
-
 
 # ---------------------------------------------------------------------------
 # Strategies
@@ -51,6 +55,7 @@ policy_strategy = st.builds(
 # Property: Policy to Adapter Mapping
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 @given(policy=policy_strategy)
 @settings(max_examples=50, deadline=None)
@@ -58,40 +63,41 @@ async def test_policy_to_adapter_mapping(policy: Policy) -> None:
     """Verifies that ContainerProvisioner correctly maps Policy to adapter types."""
     mock_adapter = AsyncMock()
     mock_adapter.initialize = AsyncMock()
-    mock_adapter.provision_container = AsyncMock(return_value=MagicMock(container_id="cid", image="img"))
+    mock_adapter.provision_container = AsyncMock(
+        return_value=MagicMock(container_id="cid", image="img")
+    )
     mock_adapter.get_adapter_name = MagicMock(return_value="mock")
-    
+
     import tempfile
+
     from isolated_agents_sdk.container_provisioner import ContainerProvisioner
+
     with tempfile.TemporaryDirectory() as tmp_dir:
         working_dir = Path(tmp_dir)
 
         provisioner = ContainerProvisioner(adapter=mock_adapter)
         await provisioner.provision(
-            working_dir=working_dir,
-            policy=policy,
-            session_id="session-123",
-            agent_id="agent-456"
+            working_dir=working_dir, policy=policy, session_id="session-123", agent_id="agent-456"
         )
-    
+
     # Check that provision_container was called with correctly mapped arguments
     args, kwargs = mock_adapter.provision_container.call_args
-    
+
     resources = kwargs.get("resources")
     assert isinstance(resources, ResourceLimits)
     assert resources.cpu_cores == policy.cpu_cores
     assert resources.memory_mb == policy.memory_mb
-    
+
     network = kwargs.get("network")
     assert isinstance(network, NetworkConfig)
     assert network.disabled == policy.network.disabled
     assert network.allowed_endpoints == policy.network.allowed_endpoints
-    
+
     security = kwargs.get("security")
     assert isinstance(security, SecurityConfig)
     # Default security settings
     assert security.read_only_rootfs is True
-    
+
     mounts = kwargs.get("mounts")
     # Should include working dir and readonly mounts
     mount_paths = [m.source for m in mounts]

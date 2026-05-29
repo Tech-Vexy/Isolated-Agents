@@ -9,6 +9,7 @@ from isolated_agents_sdk.adapters.database.base import DatabaseAdapter
 
 logger = logging.getLogger(__name__)
 
+
 class NoSQLDatabaseAdapter(DatabaseAdapter):
     """Adapter for NoSQL databases (MongoDB, Redis)."""
 
@@ -26,23 +27,31 @@ class NoSQLDatabaseAdapter(DatabaseAdapter):
         if self.db_type == "mongodb":
             try:
                 import motor.motor_asyncio
+
                 self._client = motor.motor_asyncio.AsyncIOMotorClient(self.connection_string)
                 db_name = self.kwargs.get("database", "default")
                 self._db = self._client[db_name]
             except ImportError:
-                raise ImportError("motor is required for MongoDB support. Install it with 'pip install motor'")
-        
+                raise ImportError(
+                    "motor is required for MongoDB support. Install it with 'pip install motor'"
+                )
+
         elif self.db_type == "redis":
             try:
                 import redis.asyncio as redis
+
                 self._client = redis.from_url(self.connection_string, decode_responses=True)
             except ImportError:
-                raise ImportError("redis is required for Redis support. Install it with 'pip install redis'")
-        
+                raise ImportError(
+                    "redis is required for Redis support. Install it with 'pip install redis'"
+                )
+
         else:
             raise ValueError(f"Unsupported NoSQL type: {self.db_type}")
 
-    async def query(self, query: Union[str, Dict[str, Any]], params: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    async def query(
+        self, query: str | dict[str, Any], params: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
         if not self._client:
             await self.initialize()
 
@@ -50,7 +59,7 @@ class NoSQLDatabaseAdapter(DatabaseAdapter):
             collection_name = params.get("collection") if params else None
             if not collection_name:
                 raise ValueError("MongoDB query requires 'collection' in params")
-            
+
             # query is a JSON filter for MongoDB
             filter_dict = query if isinstance(query, dict) else {}
             cursor = self._db[collection_name].find(filter_dict)
@@ -77,7 +86,7 @@ class NoSQLDatabaseAdapter(DatabaseAdapter):
 
         return []
 
-    async def execute(self, command: str, params: Optional[Dict[str, Any]] = None) -> int:
+    async def execute(self, command: str, params: dict[str, Any] | None = None) -> int:
         if not self._client:
             await self.initialize()
 
@@ -85,15 +94,14 @@ class NoSQLDatabaseAdapter(DatabaseAdapter):
             collection_name = params.get("collection") if params else None
             if not collection_name:
                 raise ValueError("MongoDB execute requires 'collection' in params")
-            
+
             # command is a command name, params contains data
             if command == "insert":
                 result = await self._db[collection_name].insert_one(params.get("document", {}))
                 return 1 if result.acknowledged else 0
             elif command == "update":
                 result = await self._db[collection_name].update_many(
-                    params.get("filter", {}), 
-                    {"$set": params.get("update", {})}
+                    params.get("filter", {}), {"$set": params.get("update", {})}
                 )
                 return result.modified_count
             elif command == "delete":
